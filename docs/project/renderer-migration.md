@@ -12,6 +12,14 @@ Implementation notes so far:
   into the renderer chunk would modulepreload the whole 858 kB bundle eagerly.
 - setCurrentRoom/Shard moved into useRoomTerrain (used by GameRoomViewer);
   RoomViewer keeps its inline copy until Phase 7 deletes it.
+- Found during Phase 3 verification: the bundled PIXI 7's SVGResource.SVG_XML
+  regex rejects SVGs whose leading comment contains ( - > ) -- 38 of the 119
+  metadata sprites (the Inkscape-authored ones) then cache as raw TEXT and the
+  first `new Sprite(<string>)` aborts the renderer's entire apply loop (no
+  objects render at all). loadRenderer.ts patches the regex before any asset
+  loads. Reproduced and verified fixed with a headless synthetic-room render.
+- Known polish item: userBadge sprites Assets.add the same badge data URL on
+  every rebuild -> harmless "[Assets] already has key" console warnings.
 
 ## Context
 
