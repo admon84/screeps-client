@@ -7,23 +7,25 @@ import { OBJ_ROAD, ST_DARK } from '~/renderer/colors.js'
 import { ObjectLayer } from '~/renderer/ObjectLayer.js'
 import { ActionAnimationLayer } from '~/renderer/ActionAnimationLayer.js'
 import { VisualLayer } from '~/renderer/VisualLayer.js'
-import { client, gameTime, setGameTime, recordGameTime, tickDuration, worldBounds, userInfo, worldStatus, serverVersion, isPrivateServer } from '~/stores/clientStore.js'
+import { client, gameTime, tickDuration, worldBounds, userInfo } from '~/stores/clientStore.js'
 import { showCreepLabels, terrainEffects, showRoomVisuals, showRoomDecorations, roomDarkOverlay, smoothAnimations } from '~/stores/settingsStore.js'
-import { setSelection, clearSelection, selection, updateSelectionWithDiff, updateSelectionFromObjects, createSelectedObject } from '~/stores/selectionStore.js'
+import { setSelection, selection, updateSelectionWithDiff, updateSelectionFromObjects, createSelectedObject } from '~/stores/selectionStore.js'
 import { addToast } from '~/stores/toastStore.js'
-import { setRoomObjectCount, setRoomOwner, setControllerLevel, setControllerProgress, setControllerReservation, setStructureCounts, setRoomUsers, roomUsers, setCurrentShard, setCurrentRoom, setRoomDecorationItems, decorationsRevision } from '~/stores/roomDataStore.js'
+import { setCurrentShard, setCurrentRoom } from '~/stores/roomDataStore.js'
 import {
-  decorateHint, decorationDraft, decorationPreviewItem, draftBounds, draftCapabilities,
+  decorationDraft, decorationPreviewItem, draftBounds, draftCapabilities,
   draftHasFrame, draftPlacement, setDraftPlacement,
 } from '~/stores/decorationEditStore.js'
 import { PlacementFrame } from '~/components/inventory/PlacementFrame.js'
-import { AMBER } from '~/components/theme.js'
 import { parseRoomName, formatRoomName, isRoomInWorld } from '~/utils/roomName.js'
 import { useRoomNavigationKeys } from '~/utils/useRoomNavigationKeys.js'
-import type { ApiRoomDecorationItem, Badge, RoomTerrain, RoomObjectMap, RoomObjectDiff } from 'screeps-connectivity'
-import { SubscriptionGroup } from 'screeps-connectivity'
-import { historyMode, historyTick, historyMinTick, historyMaxTick, setHistoryMaxTick, historyLoading, setHistoryLoading, seekToTick, playbackSpeed, isPlaying, pausePlayback } from '~/stores/historyStore.js'
-import { HistoryPlayer, HistoryUnavailableError } from '~/stores/HistoryPlayer.js'
+import type { RoomTerrain } from 'screeps-connectivity'
+import { historyMode, playbackSpeed } from '~/stores/historyStore.js'
+import { useRoomSubscription, type RoomState } from '~/components/roomView/useRoomSubscription.js'
+import { useRoomHistory } from '~/components/roomView/useRoomHistory.js'
+import { useRoomDecorationItems } from '~/components/roomView/useRoomDecorationItems.js'
+import { RoomHistorySlider } from '~/components/roomView/RoomHistorySlider.js'
+import { DecorateHint, HistoryNoDataCard, ModeHintPill, TickBadge } from '~/components/roomView/RoomViewOverlays.js'
 import {flagDraft, roomViewMode, FLAG_COLOR_MAP, pendingTile, setPendingTile, clearPendingTile, setFlagDraft, modeHint, overlayAction, setOverlayAction, clearOverlayAction, buildDraft, confirmBuild, resetRoomViewMode, resetRoomViewModeOnNavigate} from '~/stores/roomViewStore';
 import { createLogger } from '~/utils/log.js'
 
@@ -49,19 +51,6 @@ function regenerateUniqueFlagName(
     .catch((err) => error('gen unique flag name failed:', err))
 }
 
-/** Decorate mode's hint, which depends on the draft rather than the mode alone. */
-function DecorateHint() {
-  return (
-    <div style={{ display: 'flex', 'flex-direction': 'column', gap: '2px', 'text-align': 'center' }}>
-      <span>{decorateHint().primary}</span>
-      <Show when={decorateHint().note}>
-        {(note) => <span style={{ color: AMBER }}>{note()}</span>}
-      </Show>
-      <span style={{ opacity: '0.6', 'font-size': '0.9em' }}>{decorateHint().secondary}</span>
-    </div>
-  )
-}
-
 interface RoomViewerProps {
   room: string
   shard: string | null
@@ -77,13 +66,11 @@ export function RoomViewer(props: RoomViewerProps) {
   let decorationLayerRef: DecorationLayer | null = null
   const [renderer, setRenderer] = createSignal<RoomRenderer | null>(null)
   const [terrain, setTerrain] = createSignal<{ room: string, data: RoomTerrain } | null>(null)
-  // Raw items are kept so socket updates can be merged into them by `_id`; the parsed
-  // form every layer consumes is derived from that.
-  const [decorationItems, setDecorationItems] = createSignal<{ room: string; items: readonly ApiRoomDecorationItem[] } | null>(null)
-  // Items that arrived over the socket while an HTTP read was in flight. Only those are
-  // layered back on top of the response — carrying every earlier socket item over would
-  // keep a decoration that has since been taken down alive until the next room change.
-  let socketItemsSinceFetch: ApiRoomDecorationItem[] = []
+  const decorationItems = useRoomDecorationItems({
+    room: () => props.room,
+    shard: () => props.shard,
+    enabled: showRoomDecorations,
+  })
   // The draft changes on every pointer move, but its geometry is pinned, so most of those
   // changes are no-ops here. Comparing by content keeps the decoration memo — and with it
   // the layer rebuild — off the drag path entirely.
@@ -100,20 +87,30 @@ export function RoomViewer(props: RoomViewerProps) {
     const items = preview ? mergeDecorationItems(raw.items, [preview]) : raw.items
     return { room: raw.room, decoration: parseRoomDecorations(items) }
   })
-  // Publish the raw items for the sidebar and the creep properties panel.
-  createEffect(() => {
-    const raw = decorationItems()
-    setRoomDecorationItems(raw?.room === props.room ? raw.items : [])
-  })
-  const [objectState, setObjectState] = createSignal<{ objects: RoomObjectMap, diff?: RoomObjectDiff, users?: Record<string, { _id: string; username: string; badge?: Badge }> } | null>(null)
+  const [objectState, setObjectState] = createSignal<RoomState | null>(null)
   const [visualState, setVisualState] = createSignal<string>('')
-  // Set when the current history tick has no data on the server (404). Shows a
-  // "no data" hint over the room instead of a failure toast.
-  const [historyNoData, setHistoryNoData] = createSignal(false)
-  const [sliderValue, setSliderValue] = createSignal(historyTick())
-  createEffect(() => setSliderValue(historyTick()))
 
-  let seekDebounceTimer: ReturnType<typeof setTimeout> | null = null
+  useRoomSubscription({
+    room: () => props.room,
+    shard: () => props.shard,
+    active: () => !historyMode(),
+    onReset: () => {
+      setObjectState(null)
+      setVisualState('')
+    },
+    onState: (state, visual) => {
+      setObjectState(state)
+      setVisualState(visual)
+    },
+  })
+
+  const { historyNoData } = useRoomHistory({
+    room: () => props.room,
+    shard: () => props.shard,
+    active: historyMode,
+    onEnter: () => setVisualState(''),
+    onState: setObjectState,
+  })
 
   onMount(async () => {
     if (!containerRef) return
@@ -122,7 +119,6 @@ export function RoomViewer(props: RoomViewerProps) {
   })
 
   onCleanup(() => {
-    if (seekDebounceTimer !== null) clearTimeout(seekDebounceTimer)
     objLayer?.destroy()
     objLayer = null
     animLayer?.destroy()
@@ -147,7 +143,6 @@ export function RoomViewer(props: RoomViewerProps) {
     const shard = props.shard
 
     setTerrain(null)
-    setDecorationItems(null)
     setCurrentRoom(room)
     setCurrentShard(shard)
 
@@ -162,261 +157,6 @@ export function RoomViewer(props: RoomViewerProps) {
       .catch((err) => { if (!cancelled) error(`terrain load failed for ${room}:`, err) })
 
     onCleanup(() => { cancelled = true })
-  })
-
-  // Decorations are fetched in their own effect so that switching the setting back on
-  // re-fetches immediately instead of waiting for the next room change.
-  createEffect(() => {
-    const c = client()
-    if (!c || !showRoomDecorations()) return
-
-    const room = props.room
-    const shard = props.shard
-    // Re-read after this client placed or removed a decoration. The room socket only
-    // carries decorations when the server volunteers them, so an activation made from
-    // the inventory would otherwise stay invisible until the room was reloaded.
-    void decorationsRevision()
-
-    let cancelled = false
-    socketItemsSinceFetch = []
-    c.http.game.roomDecorations(room, shard)
-      .then((resp) => {
-        if (!cancelled) {
-          log(`decorations loaded — ${room}: ${resp.decorations.length} item(s)`)
-          // The response is authoritative, so removals take effect; a room tick that
-          // landed while it was in flight is layered back on top rather than dropped.
-          const items = mergeDecorationItems(resp.decorations, socketItemsSinceFetch)
-          socketItemsSinceFetch = []
-          setDecorationItems({ room, items })
-        }
-      })
-      .catch((err) => { if (!cancelled) log(`no decorations for ${room}: ${err}`) })
-
-    onCleanup(() => { cancelled = true })
-  })
-
-  // Room ticks can carry decoration changes. Merge them into whatever the HTTP fetch
-  // returned; the merge keeps the previous array when nothing actually differs, so a
-  // server that repeats the payload every tick doesn't rebuild the layer.
-  createEffect(() => {
-    const c = client()
-    if (!c || !showRoomDecorations()) return
-
-    const room = props.room
-    const shard = props.shard
-
-    const sub = c.stores.room.on('room:decorations', (data) => {
-      if (data.room !== room || data.shard !== shard) return
-      socketItemsSinceFetch.push(...data.decorations)
-      setDecorationItems((prev) => {
-        const current = prev?.room === room ? prev.items : []
-        const merged = mergeDecorationItems(current, data.decorations)
-        if (prev?.room === room && merged === current) return prev
-        log(`decorations updated via socket — ${room}: ${merged.length} item(s)`)
-        return { room, items: merged }
-      })
-    })
-
-    onCleanup(() => sub.dispose())
-  })
-
-  // Subscribe to room data as soon as client is ready (no renderer dependency to avoid
-  // a race where PixiJS init finishes after the initial room state arrives)
-  createEffect(() => {
-    const c = client()
-    if (!c || historyMode()) return
-
-    const room = props.room
-    const shard = props.shard
-
-    log(`navigate → ${room} (shard=${shard ?? 'default'})`)
-    setObjectState(null)
-    setVisualState('')
-    setGameTime(null)
-    clearSelection()
-    setRoomObjectCount(null)
-    setRoomOwner(null)
-    setControllerLevel(null)
-    setControllerProgress(null)
-    setControllerReservation(null)
-    setStructureCounts({})
-    setRoomUsers(null)
-
-    const group = new SubscriptionGroup()
-
-    group.add(c.stores.room.subscribe(room, shard))
-    group.add(c.stores.room.on('room:error', (data) => {
-      addToast(`Room subscription error (${data.room}): ${data.message}`, 'error', 8000)
-    }))
-    group.add(c.stores.room.on('room:update', (data) => {
-      // Single for...in pass: count objects, sum structures, extract controller owner —
-      // avoids allocating Object.values() / Object.entries() arrays on the hot path.
-      let objectCount = 0
-      const structCounts: Record<string, number> = {}
-      let ctrlLevel = 0
-      let ctrlProgress: number | null = null
-      let owner: { userId: string; username: string } | null = null
-      let reservation: { user: string; endTime: number } | null = null
-
-      for (const id in data.objects) {
-        objectCount++
-        const obj = data.objects[id]
-        if (!obj) continue
-
-        const objType = obj.type
-        if (typeof objType === 'string') {
-          if (objType === 'constructionSite') {
-            const structureType = obj.structureType
-            if (typeof structureType === 'string') {
-              structCounts[structureType] = (structCounts[structureType] || 0) + 1
-            }
-          } else {
-            structCounts[objType] = (structCounts[objType] || 0) + 1
-          }
-        }
-
-        if (objType === 'controller') {
-          if (typeof obj.user === 'string') {
-            const userId = obj.user
-            const username = data.users?.[userId]?.username ?? userId
-            owner = { userId, username }
-            if (typeof obj.level === 'number') ctrlLevel = obj.level
-            if (typeof obj.progress === 'number') ctrlProgress = obj.progress
-          }
-          const res = obj.reservation as { user: string; endTime: number } | undefined
-          if (res && typeof res.user === 'string' && typeof res.endTime === 'number') {
-            reservation = { user: res.user, endTime: res.endTime }
-          }
-        }
-      }
-
-      if (!data.diff) {
-        log(`objects loaded — ${room}: ${objectCount} objects, tick=${data.gameTime}`)
-      }
-      setObjectState({ objects: data.objects, diff: data.diff, users: data.users })
-      setVisualState(data.visual)
-      setGameTime(data.gameTime ?? null)
-      recordGameTime(data.gameTime)
-      setRoomObjectCount(objectCount)
-      setRoomOwner(owner)
-      setControllerLevel(ctrlLevel || null)
-      setControllerProgress(ctrlProgress)
-      setControllerReservation(reservation)
-      setStructureCounts(structCounts)
-      setRoomUsers(data.users ?? null)
-    }))
-
-    onCleanup(() => {
-      log(`leaving ${room}`)
-      group.dispose()
-    })
-  })
-
-  // History mode: fetch tick state from HTTP instead of WebSocket
-  createEffect(() => {
-    const c = client()
-    if (!c || !historyMode()) return
-
-    setVisualState('')
-
-    const room = props.room
-    const shard = props.shard
-    const isPriv = isPrivateServer() ?? true
-    const chunkSize = serverVersion()?.serverData?.historyChunkSize ?? (isPriv ? 20 : 100)
-    const cachedUsers = untrack(roomUsers) ?? undefined
-
-    const player = new HistoryPlayer(room, shard, c.http, chunkSize)
-
-    createEffect(() => {
-      const tick = historyTick()
-      let cancelled = false
-      setHistoryLoading(true)
-
-      player.getStateAtTick(tick)
-        .then((state) => {
-          if (cancelled) return
-          setHistoryLoading(false)
-          setHistoryNoData(false)
-          // If the requested chunk didn't exist yet, clamp the history range down
-          if (state.clampedTo !== undefined) {
-            setHistoryMaxTick(state.clampedTo)
-            seekToTick(state.clampedTo)
-            return
-          }
-          setObjectState({ objects: state.objects, diff: undefined, users: cachedUsers })
-          setGameTime(state.gameTime)
-
-          let objectCount = 0
-          const structCounts: Record<string, number> = {}
-          let ctrlLevel = 0
-          let ctrlProgress: number | null = null
-          let owner: { userId: string; username: string } | null = null
-          let reservation: { user: string; endTime: number } | null = null
-
-          for (const id in state.objects) {
-            objectCount++
-            const obj = state.objects[id]
-            if (!obj) continue
-            const objType = obj.type
-            if (typeof objType === 'string') {
-              if (objType === 'constructionSite') {
-                const structureType = obj.structureType
-                if (typeof structureType === 'string') {
-                  structCounts[structureType] = (structCounts[structureType] || 0) + 1
-                }
-              } else {
-                structCounts[objType] = (structCounts[objType] || 0) + 1
-              }
-            }
-            if (objType === 'controller') {
-              if (typeof obj.user === 'string') {
-                const userId = obj.user
-                const username = cachedUsers?.[userId]?.username ?? userId
-                owner = { userId, username }
-                if (typeof obj.level === 'number') ctrlLevel = obj.level
-                if (typeof obj.progress === 'number') ctrlProgress = obj.progress
-              }
-              const res = obj.reservation as { user: string; endTime: number } | undefined
-              if (res && typeof res.user === 'string' && typeof res.endTime === 'number') {
-                reservation = { user: res.user, endTime: res.endTime }
-              }
-            }
-          }
-
-          setRoomObjectCount(objectCount)
-          setRoomOwner(owner)
-          setControllerLevel(ctrlLevel || null)
-          setControllerProgress(ctrlProgress)
-          setControllerReservation(reservation)
-          setStructureCounts(structCounts)
-        })
-        .catch((err: Error) => {
-          if (cancelled) return
-          setHistoryLoading(false)
-          // No data for this tick (404): show an in-room hint instead of a failure toast.
-          if (err instanceof HistoryUnavailableError) {
-            setHistoryNoData(true)
-            // While playing, don't re-fetch the same missing chunk file on every tick —
-            // skip to the start of the next chunk in one hop. Stop if there's none left.
-            if (isPlaying()) {
-              const nextBase = player.chunkBase(tick) + chunkSize
-              if (nextBase <= historyMaxTick()) {
-                seekToTick(nextBase)
-              } else {
-                pausePlayback()
-              }
-            }
-            return
-          }
-          setHistoryNoData(false)
-          addToast(`History load failed for tick ${tick}: ${err.message}`, 'error', 5000)
-        })
-
-      onCleanup(() => { cancelled = true })
-    })
-
-    // Reset the "no data" hint when leaving history mode / changing room.
-    onCleanup(() => setHistoryNoData(false))
   })
 
   // Clear and reset when renderer or room changes (worldBounds intentionally NOT tracked here
@@ -566,10 +306,10 @@ export function RoomViewer(props: RoomViewerProps) {
     r.bringNavOverlayToTop()
   })
 
-  // Clear decorations when the setting is turned off
+  // Reset decoration-tinted layers when the setting is turned off (the items themselves
+  // are cleared by useRoomDecorationItems)
   createEffect(() => {
     if (showRoomDecorations()) return
-    setDecorationItems(null)
     const r = untrack(renderer)
     const t = untrack(terrain)
     if (!r || !t || t.room !== props.room) return
@@ -1045,118 +785,13 @@ export function RoomViewer(props: RoomViewerProps) {
           </div>
         )}
       </Show>
-      {hint() && (
-        <div
-          style={{
-            position: 'absolute',
-            top: '12px',
-            left: '50%',
-            transform: 'translateX(-50%)',
-            padding: '6px 16px',
-            'border-radius': '6px',
-            background: 'rgba(13, 17, 23, 0.65)',
-            border: '1px solid rgba(48, 54, 61, 0.6)',
-            'font-size': '13px',
-            'font-weight': 500,
-            color: '#c9d1d9',
-            'pointer-events': (worldStatus() === 'empty' || worldStatus() === 'lost') ? 'auto' : 'none',
-            'user-select': 'none',
-            'z-index': 10,
-          }}
-        >
-          {hint()}
-        </div>
-      )}
-      {!historyMode() && gameTime() !== null && (
-        <div
-          style={{
-            position: 'absolute',
-            top: '8px',
-            right: '8px',
-            padding: '4px 10px',
-            'border-radius': '4px',
-            background: 'rgba(13, 17, 23, 0.8)',
-            border: '1px solid #30363d',
-            'font-size': '12px',
-            color: '#8b949e',
-            'z-index': 10,
-          }}
-        >
-          Tick {gameTime()}
-        </div>
-      )}
+      {hint() && <ModeHintPill hint={hint()} />}
+      <TickBadge />
       <Show when={historyMode() && historyNoData()}>
-        <div
-          style={{
-            position: 'absolute',
-            top: '50%',
-            left: '50%',
-            transform: 'translate(-50%, -50%)',
-            padding: '16px 22px',
-            'border-radius': '8px',
-            background: 'rgba(13, 17, 23, 0.9)',
-            border: '1px solid #30363d',
-            'text-align': 'center',
-            'max-width': '320px',
-            'pointer-events': 'none',
-            'user-select': 'none',
-            'z-index': 11,
-          }}
-        >
-          <div style={{ 'font-size': '14px', 'font-weight': 600, color: '#c9d1d9', 'margin-bottom': '4px' }}>
-            No data available for this tick
-          </div>
-          <div style={{ 'font-size': '12px', color: '#8b949e' }}>
-            Use the timeline below to choose another tick.
-          </div>
-        </div>
+        <HistoryNoDataCard />
       </Show>
       <Show when={historyMode()}>
-        <div
-          style={{
-            position: 'absolute',
-            bottom: 0,
-            left: 0,
-            right: 0,
-            padding: '8px 12px',
-            background: 'rgba(13, 17, 23, 0.85)',
-            'border-top': '1px solid #30363d',
-            'z-index': 10,
-          }}
-        >
-          <input
-            type="range"
-            min={historyMinTick()}
-            max={historyMaxTick()}
-            value={sliderValue()}
-            step={1}
-            onInput={(e) => {
-              const v = parseInt(e.currentTarget.value, 10)
-              setSliderValue(v)
-              if (seekDebounceTimer !== null) clearTimeout(seekDebounceTimer)
-              seekDebounceTimer = setTimeout(() => {
-                seekDebounceTimer = null
-                seekToTick(v)
-              }, 150)
-            }}
-            style={{ width: '100%', cursor: 'pointer' }}
-          />
-          <div
-            style={{
-              display: 'flex',
-              'justify-content': 'space-between',
-              'font-size': '10px',
-              color: '#8b949e',
-              'margin-top': '2px',
-            }}
-          >
-            <span>{historyMinTick()}</span>
-            <span style={{ color: historyLoading() ? '#f0883e' : '#8b949e' }}>
-              {historyLoading() ? 'Loading…' : `Tick ${historyTick()}`}
-            </span>
-            <span>{historyMaxTick()}</span>
-          </div>
-        </div>
+        <RoomHistorySlider />
       </Show>
     </div>
   )
