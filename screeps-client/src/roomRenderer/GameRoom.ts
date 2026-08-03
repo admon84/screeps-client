@@ -74,12 +74,19 @@ export class GameRoom {
       // pixel ratio only reaches it through the global default, read in the constructor.
       pixi7().settings.RESOLUTION = window.devicePixelRatio || 1
 
+      // Later instances skip aliases already registered: Assets.add would warn per key,
+      // and the textures are still cached (releaseEngine keeps the caches warm), so
+      // World.init has nothing to load -- this is what keeps room switches fast.
+      const assets = pixi7().Assets
+      const resourceMap = Object.fromEntries(
+        Object.entries(options.resourceMap).filter(([alias]) => !assets.resolver.hasKey(alias)))
+
       const gameApp = new GameRenderer({
         size: {
           width: options.container.clientWidth,
           height: options.container.clientHeight,
         },
-        resourceMap: options.resourceMap,
+        resourceMap,
         worldConfigs,
         backgroundColor: 0x0d1117,
         countMetrics: import.meta.env.DEV,
@@ -208,11 +215,28 @@ export class GameRoom {
     this.visuals.destroy()
     this.hover.destroy()
     this.camera.destroy()
-    this.gameApp.release()
+    this.releaseEngine()
     if (import.meta.env.DEV) {
       delete (globalThis as Record<string, unknown>).__PIXI7_APP__
     }
     this.releaseDone()
+  }
+
+  /**
+   * Manual port of GameRenderer.release() minus its global-cache destruction. The engine
+   * calls Assets.reset() and utils.destroyTextureCache(), which destroy textures the
+   * Assets cache still manages ("destroyed instead of unloaded" warnings) while the next
+   * room's instance resolves the same aliases from those caches -- crashing navigation.
+   * Keeping the caches warm is also what makes per-room recreation cheap. removeView
+   * pulls the dead canvas out of the container; the engine's own destroy() leaves it
+   * appended, stacking one canvas per room switch.
+   */
+  private releaseEngine(): void {
+    const internals = this.gameApp as unknown as { animateCheckerTimer?: number; released?: boolean }
+    clearTimeout(internals.animateCheckerTimer)
+    this.gameApp.world.removeAllObjects()
+    this.gameApp.app.destroy(true, { children: true })
+    internals.released = true
   }
 
   private clearTerrainSprites(): void {
