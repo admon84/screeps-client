@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, onCleanup, onMount, untrack, Show } from 'solid-js'
+import { createEffect, createMemo, createSignal, onCleanup, untrack, Show } from 'solid-js'
 import { GameRoom } from '~/roomRenderer/GameRoom.js'
 import { resourceMap } from '~/roomRenderer/resourceMap.js'
 import { CELL_SIZE } from '~/roomRenderer/worldConfigs.js'
@@ -6,7 +6,7 @@ import { toGameData, toLighting } from '~/roomRenderer/adapters/settingsMapping.
 import { withBadgeUrls } from '~/roomRenderer/adapters/badgeUrls.js'
 import { objectsAtTile } from '~/roomRenderer/hitTest.js'
 import { client, gameTime, tickDuration, worldBounds, userInfo } from '~/stores/clientStore.js'
-import { showCreepLabels, terrainEffects, roomDarkOverlay, smoothAnimations } from '~/stores/settingsStore.js'
+import { showCreepLabels, terrainEffects, roomDarkOverlay, smoothAnimations, showRoomVisuals } from '~/stores/settingsStore.js'
 import { historyMode, playbackSpeed } from '~/stores/historyStore.js'
 import {
   flagDraft, roomViewMode, FLAG_COLOR_MAP, pendingTile, setPendingTile, clearPendingTile,
@@ -46,6 +46,7 @@ export function GameRoomViewer(props: GameRoomViewerProps) {
   let containerRef: HTMLDivElement | undefined
   const [gameRoom, setGameRoom] = createSignal<GameRoom | null>(null)
   const [objectState, setObjectState] = createSignal<RoomState | null>(null)
+  const [visualState, setVisualState] = createSignal('')
 
   const terrain = useRoomTerrain({
     room: () => props.room,
@@ -56,49 +57,61 @@ export function GameRoomViewer(props: GameRoomViewerProps) {
     room: () => props.room,
     shard: () => props.shard,
     active: () => !historyMode(),
-    onReset: () => setObjectState(null),
-    // RoomVisuals (the visual payload) are wired up in a later migration phase.
-    onState: (state) => setObjectState(state),
+    onReset: () => {
+      setObjectState(null)
+      setVisualState('')
+    },
+    onState: (state, visual) => {
+      setObjectState(state)
+      setVisualState(visual)
+    },
   })
 
   const { historyNoData } = useRoomHistory({
     room: () => props.room,
     shard: () => props.shard,
     active: historyMode,
-    onEnter: () => {},
+    onEnter: () => setVisualState(''),
     onState: setObjectState,
   })
 
-  let disposed = false
-  onMount(async () => {
-    if (!containerRef) return
+  // GameRoom lifecycle. Lighting is baked into the renderer's layer setup at world init,
+  // so the dark-overlay toggle rebuilds the whole instance (rare; construction is
+  // serialized against the previous instance's release inside GameRoom.create).
+  createEffect(() => {
+    const darkOverlay = roomDarkOverlay()
+    const container = containerRef
+    if (!container) return
+
+    let cancelled = false
+    let created: GameRoom | null = null
     const settings = untrack(() => ({
       showCreepLabels: showCreepLabels(),
       terrainEffects: terrainEffects(),
-      roomDarkOverlay: roomDarkOverlay(),
+      roomDarkOverlay: darkOverlay,
       smoothAnimations: smoothAnimations(),
     }))
-    try {
-      const room = await GameRoom.create({
-        container: containerRef,
-        gameData: toGameData(settings, untrack(userInfo)?._id ?? ''),
-        lighting: toLighting(settings),
-        resourceMap,
+    GameRoom.create({
+      container,
+      gameData: toGameData(settings, untrack(userInfo)?._id ?? ''),
+      lighting: toLighting(settings),
+      resourceMap,
+    })
+      .then((room) => {
+        if (cancelled) {
+          room.release()
+          return
+        }
+        created = room
+        setGameRoom(room)
       })
-      if (disposed) {
-        room.release()
-        return
-      }
-      setGameRoom(room)
-    } catch (err) {
-      error('official renderer init failed:', err)
-    }
-  })
+      .catch((err) => error('official renderer init failed:', err))
 
-  onCleanup(() => {
-    disposed = true
-    gameRoom()?.release()
-    setGameRoom(null)
+    onCleanup(() => {
+      cancelled = true
+      created?.release()
+      setGameRoom(null)
+    })
   })
 
   // Room switch: drop the previous room's objects and reset the camera before the new
@@ -203,6 +216,48 @@ export function GameRoomViewer(props: GameRoomViewerProps) {
     const base = untrack(client)?.http.baseUrl ?? '/'
     return `${base}api/user/badge-svg?username=%1`
   }
+
+  // Update the RoomVisuals overlay each tick. Read visualState() before the optional
+  // chain so SolidJS always tracks it, even while gameRoom is still initializing.
+  createEffect(() => {
+    const raw = visualState()
+    const show = showRoomVisuals()
+    gameRoom()?.visuals.update(show ? raw : '')
+  })
+
+  // Labels and swamp texture are baked into built sprites/terrain, so a change mutates
+  // the world's live gameData and rebuilds the scene from current state. The baseline
+  // guard skips the rebuild for a freshly created GameRoom (it was constructed with the
+  // current settings, and an erase here would race the first applyState).
+  let renderSettingsBaseline: { g: GameRoom; key: string } | null = null
+  createEffect(() => {
+    const g = gameRoom()
+    if (!g) return
+    const key = `${showCreepLabels()}|${terrainEffects()}`
+    if (renderSettingsBaseline?.g !== g) {
+      renderSettingsBaseline = { g, key }
+      return
+    }
+    if (renderSettingsBaseline.key === key) return
+    renderSettingsBaseline = { g, key }
+
+    untrack(() => {
+      g.updateGameData(toGameData({
+        showCreepLabels: showCreepLabels(),
+        terrainEffects: terrainEffects(),
+        roomDarkOverlay: roomDarkOverlay(),
+        smoothAnimations: smoothAnimations(),
+      }, userInfo()?._id ?? ''))
+      g.eraseObjects()
+      const t = terrain()
+      if (t && t.room === props.room) g.applyTerrain(t.room, t.data)
+      const state = objectState()
+      if (state) {
+        const users = withBadgeUrls(state.users, badgeUrlTemplate())
+        g.applyState(state.objects, users, gameTime() ?? undefined, 0)
+      }
+    })
+  })
 
   // ── Tile interaction ────────────────────────────────────────────────────────────
   // Registered once per GameRoom; the handlers must read live props/stores at

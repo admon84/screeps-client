@@ -5,6 +5,7 @@ import { pixi7 } from './pixi7.js'
 import { buildWorldConfigs } from './worldConfigs.js'
 import { RoomCamera } from './RoomCamera.js'
 import { HoverOverlay } from './overlays/HoverOverlay.js'
+import { VisualOverlay } from './overlays/VisualOverlay.js'
 import { toRendererState } from './adapters/stateAdapter.js'
 import { toRendererTerrain } from './adapters/terrainAdapter.js'
 
@@ -38,6 +39,8 @@ export class GameRoom {
   readonly gameApp: GameRenderer
   readonly camera: RoomCamera
   readonly hover: HoverOverlay
+  readonly visuals: VisualOverlay
+  private readonly gameData: GameData
   private readonly resizeObserver: ResizeObserver
   private readonly releaseDone: () => void
   private released = false
@@ -80,7 +83,7 @@ export class GameRoom {
       ;(gameApp.app.renderer as unknown as { _view: { autoDensity: boolean } })._view.autoDensity = true
       gameApp.app.renderer.resize(options.container.clientWidth, options.container.clientHeight)
 
-      return new GameRoom(gameApp, options.container, releaseDone)
+      return new GameRoom(gameApp, options.container, options.gameData, releaseDone)
     })()
 
     // The next instance waits for this build and, if it succeeded, for its release.
@@ -88,11 +91,13 @@ export class GameRoom {
     return creation
   }
 
-  private constructor(gameApp: GameRenderer, container: HTMLElement, releaseDone: () => void) {
+  private constructor(gameApp: GameRenderer, container: HTMLElement, gameData: GameData, releaseDone: () => void) {
     this.gameApp = gameApp
+    this.gameData = gameData
     this.releaseDone = releaseDone
     this.camera = new RoomCamera(gameApp, container)
     this.hover = new HoverOverlay(gameApp)
+    this.visuals = new VisualOverlay(gameApp)
 
     this.resizeObserver = new ResizeObserver((entries) => {
       const { width, height } = entries[0].contentRect
@@ -127,6 +132,16 @@ export class GameRoom {
     this.gameApp.erase()
   }
 
+  /**
+   * Mutates the live gameData object the World holds a reference to (re-read on every
+   * applyState and setTerrain). Existing sprites keep their labels/textures, so the
+   * caller follows up with eraseObjects() + a full re-apply (+ re-terrain for
+   * swampTexture changes).
+   */
+  updateGameData(next: GameData): void {
+    Object.assign(this.gameData, next)
+  }
+
   getObjectContainer(id: string): import('pixi7').Container | null {
     return this.gameApp.world.gameObjects[id]?.rootContainer ?? null
   }
@@ -135,6 +150,7 @@ export class GameRoom {
     if (this.released) return
     this.released = true
     this.resizeObserver.disconnect()
+    this.visuals.destroy()
     this.hover.destroy()
     this.camera.destroy()
     this.gameApp.release()
