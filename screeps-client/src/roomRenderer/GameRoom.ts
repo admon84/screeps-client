@@ -34,6 +34,13 @@ export interface GameRoomOptions {
 /**
  * Lifecycle wrapper around @screeps/renderer's GameRenderer: serialized construction,
  * retina setup, resize observation, terrain/state application, and release.
+ *
+ * ONE INSTANCE PER ROOM. The engine assumes it renders a single room for its lifetime:
+ * terrain md5 memos, the shared wallMask sprite, decoration identity checks and
+ * stage-parented creep-action effects all leak into the next room if an instance is
+ * reused across navigation (verified: stale landscape recolors, ghost beams, and
+ * lighting-composite corruption that survives even a full manual reset). Navigation
+ * releases the instance and creates a fresh one; the handoff serializes that safely.
  */
 export class GameRoom {
   readonly gameApp: GameRenderer
@@ -121,7 +128,7 @@ export class GameRoom {
     // no "clear" path for them -- so they have to be hidden here.
     if (sparse.length === 0) this.clearTerrainSprites()
     // Graffiti masks against stage.terrainObjects.wallMask, which setTerrain just rebuilt.
-    if (this.lastDecorations.length) this.gameApp.setDecorations(this.lastDecorations)
+    if (this.lastDecorations.length) this.setDecorationsSafely(this.lastDecorations)
   }
 
   /**
@@ -134,8 +141,25 @@ export class GameRoom {
   applyDecorations(items: DecorationItem[], { refreshTerrain = true } = {}): void {
     if (items.length === 0 && this.lastDecorations.length === 0) return
     this.lastDecorations = items
-    this.gameApp.setDecorations(items)
+    this.setDecorationsSafely(items)
+    this.cancelDestroyedActions()
     if (refreshTerrain && this.lastTerrain) this.gameApp.setTerrain(this.lastTerrain)
+  }
+
+  /**
+   * setDecorations destroys the previous container with `texture: true`, which tears down
+   * TEXTURES SHARED THROUGH THE URL CACHES -- the terrain's noise textures, and any
+   * texture a later Sprite.from(sameUrl) would return -- leaving white/broken sprites and
+   * per-frame render errors. Destroying the container ourselves (textures kept) makes the
+   * renderer skip its destructive teardown.
+   */
+  private setDecorationsSafely(items: DecorationItem[]): void {
+    const world = this.gameApp.world
+    if (world.decorationsContainer) {
+      world.decorationsContainer.destroy({ children: true })
+      world.decorationsContainer = undefined
+    }
+    this.gameApp.setDecorations(items)
   }
 
   applyState(
@@ -149,6 +173,18 @@ export class GameRoom {
 
   eraseObjects(): void {
     this.gameApp.erase()
+  }
+
+  /**
+   * Repeat-based animations never end on their own, so handles pointing at destroyed
+   * sprites (each setDecorations rebuild destroys the previous container's children)
+   * would accumulate forever.
+   */
+  private cancelDestroyedActions(): void {
+    const manager = this.gameApp.actionManager
+    for (const { actionHandle, container } of Object.values(manager.actions)) {
+      if (container.destroyed) manager.cancelAction(actionHandle)
+    }
   }
 
   /**

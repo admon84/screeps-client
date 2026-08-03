@@ -112,9 +112,15 @@ declare module '@screeps/renderer' {
     rootContainer: Pixi7Container
   }
 
+  export class ActionManager {
+    actions: Record<string, { actionHandle: unknown; container: Pixi7Container }>
+    cancelAction(handle: unknown): void
+  }
+
   export class World {
     gameObjects: Record<string, GameObject>
     decorations: unknown[]
+    decorationsContainer?: Pixi7Container
     applyState(state: State, tickDuration: number, globalOnly?: boolean): void
     removeAllObjects(): void
     release(): void
@@ -140,6 +146,7 @@ declare module '@screeps/renderer' {
 
     app: Pixi7Application
     world: World
+    actionManager: ActionManager
     metrics: Metrics
     released?: boolean
 

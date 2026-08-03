@@ -98,10 +98,14 @@ export function GameRoomViewer(props: GameRoomViewerProps) {
     return toRendererDecorations(items, decorationTextureUrl)
   })
 
-  // GameRoom lifecycle. Lighting is baked into the renderer's layer setup at world init,
-  // so the dark-overlay toggle rebuilds the whole instance (rare; construction is
-  // serialized against the previous instance's release inside GameRoom.create).
+  // GameRoom lifecycle: one instance per room (the engine leaks terrain/decoration/
+  // effect state across rooms otherwise -- see GameRoom's doc comment), and the
+  // dark-overlay toggle also rebuilds (lighting is baked into layer setup at world
+  // init). Construction is serialized against the previous instance's release inside
+  // GameRoom.create.
   createEffect(() => {
+    void props.room
+    void props.shard
     const darkOverlay = roomDarkOverlay()
     const container = containerRef
     if (!container) return
@@ -137,27 +141,19 @@ export function GameRoomViewer(props: GameRoomViewerProps) {
     })
   })
 
-  // Room switch: drop the previous room's objects and reset the camera before the new
-  // terrain and state arrive. Created before the terrain effect so a pre-loaded terrain
-  // for the new room is applied after the erase.
+  // Room switch bookkeeping. The renderer itself is recreated per room by the lifecycle
+  // effect above; this only resets interaction modes.
   createEffect(() => {
-    const g = gameRoom()
-    if (!g) return
     void props.room
     void props.shard
 
     resetRoomViewModeOnNavigate()
-    g.hover.clearPendingTile()
 
     // Keep the overlay alive for cross-room flag moves; update targetRoom to the new room
     const activeOverlay = untrack(overlayAction)
     if (activeOverlay?.type === 'moveFlag') {
       setOverlayAction({ ...activeOverlay, targetRoom: props.room })
     }
-
-    g.eraseObjects()
-    g.camera.resetView()
-    setupNavZones(g, untrack(worldBounds))
   })
 
   // Re-wire nav zones (and keyboard navigation) when worldBounds arrives after login.
