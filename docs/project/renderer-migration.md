@@ -28,8 +28,12 @@ Implementation notes so far:
   ghost action beams (effect sprites parent to the stage, not the creep), and
   a lighting-composite corruption that survived every targeted reset we tried
   (erase + decoration clear + terrain md5 reset + action-manager sweep).
-  Room-switch cost is a renderer rebuild (~0.5s); assets are inline data URLs
-  so no network refetch is involved.
+  Room-switch cost is a renderer rebuild (~400ms). GameRoom.releaseEngine()
+  replaces the engine's own release, which destroys GLOBAL caches
+  (Assets.reset + destroyTextureCache -- crashes the next instance) and leaves
+  the dead canvas in the container (no removeView). Caches stay warm across
+  instances and later instances skip already-registered asset aliases, so
+  assets load once per session.
 - setDecorations' own container teardown uses destroy({texture: true}), which
   destroys URL-cached textures shared with other sprites (terrain noise, any
   later Sprite.from of the same URL). GameRoom pre-empts it by destroying the
