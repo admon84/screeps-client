@@ -22,6 +22,19 @@ Implementation notes so far:
   loads. Reproduced and verified fixed with a headless synthetic-room render.
 - Known polish item: userBadge sprites Assets.add the same badge data URL on
   every rebuild -> harmless "[Assets] already has key" console warnings.
+- The renderer is ONE INSTANCE PER ROOM: navigation releases and recreates the
+  GameRoom (serialized by the construction handoff). The engine leaks state
+  across rooms otherwise -- old-room landscape recolors on new-room walls,
+  ghost action beams (effect sprites parent to the stage, not the creep), and
+  a lighting-composite corruption that survived every targeted reset we tried
+  (erase + decoration clear + terrain md5 reset + action-manager sweep).
+  Room-switch cost is a renderer rebuild (~0.5s); assets are inline data URLs
+  so no network refetch is involved.
+- setDecorations' own container teardown uses destroy({texture: true}), which
+  destroys URL-cached textures shared with other sprites (terrain noise, any
+  later Sprite.from of the same URL). GameRoom pre-empts it by destroying the
+  container itself with textures kept, and GCs action handles pointing at
+  destroyed sprites after each rebuild (Repeat animations never self-end).
 
 ## Context
 
