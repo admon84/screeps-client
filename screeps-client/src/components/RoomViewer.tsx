@@ -26,30 +26,11 @@ import { useRoomHistory } from '~/components/roomView/useRoomHistory.js'
 import { useRoomDecorationItems } from '~/components/roomView/useRoomDecorationItems.js'
 import { RoomHistorySlider } from '~/components/roomView/RoomHistorySlider.js'
 import { DecorateHint, HistoryNoDataCard, ModeHintPill, TickBadge } from '~/components/roomView/RoomViewOverlays.js'
-import {flagDraft, roomViewMode, FLAG_COLOR_MAP, pendingTile, setPendingTile, clearPendingTile, setFlagDraft, modeHint, overlayAction, setOverlayAction, clearOverlayAction, buildDraft, confirmBuild, resetRoomViewMode, resetRoomViewModeOnNavigate} from '~/stores/roomViewStore';
+import {flagDraft, roomViewMode, FLAG_COLOR_MAP, pendingTile, setPendingTile, clearPendingTile, modeHint, overlayAction, setOverlayAction, clearOverlayAction, buildDraft, confirmBuild, resetRoomViewMode, resetRoomViewModeOnNavigate} from '~/stores/roomViewStore';
+import { regenerateUniqueFlagName } from '~/components/roomView/flagActions.js'
 import { createLogger } from '~/utils/log.js'
 
 const { log, error } = createLogger('room')
-
-// After creating a flag the server needs a moment to register it, so an
-// immediate gen-unique-flag-name can still return the name we just used.
-// Retry with a short backoff until we get a different name (or give up).
-function regenerateUniqueFlagName(
-  c: NonNullable<ReturnType<typeof client>>,
-  usedName: string,
-  shard: string | null,
-  retries = 4,
-): void {
-  c.http.game.genUniqueFlagName(shard)
-    .then((res) => {
-      if (res.name === usedName && retries > 0) {
-        setTimeout(() => regenerateUniqueFlagName(c, usedName, shard, retries - 1), 200)
-        return
-      }
-      setFlagDraft((prev) => ({ ...prev, name: res.name }))
-    })
-    .catch((err) => error('gen unique flag name failed:', err))
-}
 
 interface RoomViewerProps {
   room: string

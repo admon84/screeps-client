@@ -4,6 +4,7 @@ import { loadRenderer } from './loadRenderer.js'
 import { pixi7 } from './pixi7.js'
 import { buildWorldConfigs } from './worldConfigs.js'
 import { RoomCamera } from './RoomCamera.js'
+import { HoverOverlay } from './overlays/HoverOverlay.js'
 import { toRendererState } from './adapters/stateAdapter.js'
 import { toRendererTerrain } from './adapters/terrainAdapter.js'
 
@@ -36,6 +37,7 @@ export interface GameRoomOptions {
 export class GameRoom {
   readonly gameApp: GameRenderer
   readonly camera: RoomCamera
+  readonly hover: HoverOverlay
   private readonly resizeObserver: ResizeObserver
   private readonly releaseDone: () => void
   private released = false
@@ -90,6 +92,7 @@ export class GameRoom {
     this.gameApp = gameApp
     this.releaseDone = releaseDone
     this.camera = new RoomCamera(gameApp, container)
+    this.hover = new HoverOverlay(gameApp)
 
     this.resizeObserver = new ResizeObserver((entries) => {
       const { width, height } = entries[0].contentRect
@@ -132,6 +135,7 @@ export class GameRoom {
     if (this.released) return
     this.released = true
     this.resizeObserver.disconnect()
+    this.hover.destroy()
     this.camera.destroy()
     this.gameApp.release()
     if (import.meta.env.DEV) {
