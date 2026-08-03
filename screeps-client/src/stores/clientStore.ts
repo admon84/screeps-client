@@ -142,6 +142,25 @@ export const isPrivateServer = () => {
 
 export { client, status, error, sessionError, rateLimitError, setRateLimitError, userInfo, serverVersion, gameTime, setGameTime, tickDuration, setTickDuration, isGuest, authMethod, worldBounds, setWorldBounds, userFlags, worldStatus }
 
+/**
+ * Popout windows install an RPC-backed client shim instead of connecting
+ * themselves — the main window proxies for them over a BroadcastChannel.
+ */
+export function installPopoutClient(c: ScreepsClient): void {
+  setClient(c)
+  setStatus('connected')
+}
+
+/**
+ * Popout windows seed session-level signals from the host's `session.state`
+ * answer — the map needs userInfo for own-room colouring, and the shard select
+ * in MapInfoPanel needs serverVersion. The setters stay module-private.
+ */
+export function applyPopoutSessionState(state: { userInfo: UserInfo | null; serverVersion: ServerVersion | null }): void {
+  setUserInfo(state.userInfo)
+  setServerVersion(state.serverVersion)
+}
+
 export async function connect(opts: {
   url: string
   auth: 'password' | 'token' | 'guest'
