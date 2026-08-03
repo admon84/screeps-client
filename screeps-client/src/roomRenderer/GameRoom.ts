@@ -1,4 +1,4 @@
-import type { GameData, GameRenderer, StateUser, WorldConfigs } from '@screeps/renderer'
+import type { DecorationItem, GameData, GameRenderer, StateUser, TerrainState, WorldConfigs } from '@screeps/renderer'
 import type { RoomObjectMap, RoomTerrain } from 'screeps-connectivity'
 import { loadRenderer } from './loadRenderer.js'
 import { pixi7 } from './pixi7.js'
@@ -44,6 +44,8 @@ export class GameRoom {
   private readonly resizeObserver: ResizeObserver
   private readonly releaseDone: () => void
   private released = false
+  private lastTerrain: TerrainState[] | null = null
+  private lastDecorations: DecorationItem[] = []
 
   static async create(options: GameRoomOptions): Promise<GameRoom> {
     const previous = rendererHandoff
@@ -113,10 +115,27 @@ export class GameRoom {
 
   applyTerrain(room: string, terrain: RoomTerrain): void {
     const sparse = toRendererTerrain(room, terrain)
+    this.lastTerrain = sparse
     this.gameApp.setTerrain(sparse)
     // An empty set leaves the previous walls and swamps drawn -- the terrain processor has
     // no "clear" path for them -- so they have to be hidden here.
     if (sparse.length === 0) this.clearTerrainSprites()
+    // Graffiti masks against stage.terrainObjects.wallMask, which setTerrain just rebuilt.
+    if (this.lastDecorations.length) this.gameApp.setDecorations(this.lastDecorations)
+  }
+
+  /**
+   * Native decoration pipeline (wall graffiti + landscapes). The terrain processor reads
+   * world.decorations for landscape/road recolors and invalidates its md5 cache when the
+   * decoration identity changes, so terrain is re-applied afterwards -- except on the
+   * editor's drag path, where only geometry changed and a full terrain SVG rebuild per
+   * frame would kill pointer responsiveness.
+   */
+  applyDecorations(items: DecorationItem[], { refreshTerrain = true } = {}): void {
+    if (items.length === 0 && this.lastDecorations.length === 0) return
+    this.lastDecorations = items
+    this.gameApp.setDecorations(items)
+    if (refreshTerrain && this.lastTerrain) this.gameApp.setTerrain(this.lastTerrain)
   }
 
   applyState(

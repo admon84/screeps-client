@@ -5,8 +5,11 @@ import { CELL_SIZE } from '~/roomRenderer/worldConfigs.js'
 import { toGameData, toLighting } from '~/roomRenderer/adapters/settingsMapping.js'
 import { withBadgeUrls } from '~/roomRenderer/adapters/badgeUrls.js'
 import { objectsAtTile } from '~/roomRenderer/hitTest.js'
+import { toRendererDecorations } from '~/roomRenderer/adapters/decorationAdapter.js'
+import { decorationTextureUrl } from '~/renderer/decorationTextureUrl.js'
+import { mergeDecorationItems } from '~/renderer/roomDecorations.js'
 import { client, gameTime, tickDuration, worldBounds, userInfo } from '~/stores/clientStore.js'
-import { showCreepLabels, terrainEffects, roomDarkOverlay, smoothAnimations, showRoomVisuals } from '~/stores/settingsStore.js'
+import { showCreepLabels, terrainEffects, roomDarkOverlay, smoothAnimations, showRoomVisuals, showRoomDecorations } from '~/stores/settingsStore.js'
 import { historyMode, playbackSpeed } from '~/stores/historyStore.js'
 import {
   flagDraft, roomViewMode, FLAG_COLOR_MAP, pendingTile, setPendingTile, clearPendingTile,
@@ -15,8 +18,10 @@ import {
 } from '~/stores/roomViewStore'
 import { setSelection, selection, updateSelectionWithDiff, updateSelectionFromObjects, createSelectedObject } from '~/stores/selectionStore.js'
 import {
-  decorationDraft, draftBounds, draftCapabilities, draftHasFrame, draftPlacement, setDraftPlacement,
+  decorationDraft, decorationPreviewItem, draftBounds, draftCapabilities, draftHasFrame,
+  draftPlacement, setDraftPlacement,
 } from '~/stores/decorationEditStore.js'
+import { useRoomDecorationItems } from '~/components/roomView/useRoomDecorationItems.js'
 import { PlacementFrame } from '~/components/inventory/PlacementFrame.js'
 import { addToast } from '~/stores/toastStore.js'
 import { parseRoomName, formatRoomName, isRoomInWorld } from '~/utils/roomName.js'
@@ -73,6 +78,24 @@ export function GameRoomViewer(props: GameRoomViewerProps) {
     active: historyMode,
     onEnter: () => setVisualState(''),
     onState: setObjectState,
+  })
+
+  const decorationItems = useRoomDecorationItems({
+    room: () => props.room,
+    shard: () => props.shard,
+    enabled: showRoomDecorations,
+  })
+  // The draft changes on every pointer move, but its geometry is pinned, so comparing by
+  // content keeps color/animation edits live without rebuilding on the drag path.
+  const decorationPreview = createMemo(decorationPreviewItem, undefined, {
+    equals: (a, b) => JSON.stringify(a) === JSON.stringify(b),
+  })
+  const rendererDecorations = createMemo(() => {
+    const raw = decorationItems()
+    if (!raw || raw.room !== props.room) return []
+    const preview = decorationPreview()
+    const items = preview ? mergeDecorationItems(raw.items, [preview]) : raw.items
+    return toRendererDecorations(items, decorationTextureUrl)
   })
 
   // GameRoom lifecycle. Lighting is baked into the renderer's layer setup at world init,
@@ -223,6 +246,35 @@ export function GameRoomViewer(props: GameRoomViewerProps) {
     const raw = visualState()
     const show = showRoomVisuals()
     gameRoom()?.visuals.update(show ? raw : '')
+  })
+
+  // Native decorations: graffiti + landscape recolors, applied whenever the items (or a
+  // color/animation edit via the pinned preview) change.
+  createEffect(() => {
+    const g = gameRoom()
+    if (!g) return
+    g.applyDecorations(rendererDecorations())
+  })
+
+  // Dragging pushes the placement straight into a native rebuild, rAF-throttled --
+  // Sprite.from hits the texture cache, so rebuilding a handful of sprites per frame is
+  // cheap. Terrain recolor is skipped here (geometry doesn't affect it).
+  let dragRaf: number | null = null
+  createEffect(() => {
+    const g = gameRoom()
+    const draft = decorationDraft()
+    const placement = draftPlacement()
+    if (!g || !draft || !placement) return
+    const items = rendererDecorations().map((item) =>
+      item._id === draft.id ? { ...item, ...placement } : item)
+    if (dragRaf !== null) cancelAnimationFrame(dragRaf)
+    dragRaf = requestAnimationFrame(() => {
+      dragRaf = null
+      g.applyDecorations(items, { refreshTerrain: false })
+    })
+  })
+  onCleanup(() => {
+    if (dragRaf !== null) cancelAnimationFrame(dragRaf)
   })
 
   // Labels and swamp texture are baked into built sprites/terrain, so a change mutates
