@@ -1,8 +1,10 @@
 # Room Rendering Migration to @screeps/renderer
 
-Status: Phases 1-3 landed on the renderer-migration branch. The new view is
-behind the "Official room renderer (experimental)" setting and needs its first
-manual visual pass (Phase 3 checklist below) before Phase 4 starts.
+Status: Phases 1-6 landed on the renderer-migration branch; the new view is
+feature-complete behind the "Official room renderer (experimental)" setting.
+Phases 3-5 are user-verified against a live server; Phase 6 (decorations) is
+headless-verified and needs an in-session pass. Remaining: Phase 7 cutover
+(flip the default for a release, then delete the legacy pipeline).
 
 Implementation notes so far:
 - rescaleResources is omitted: v1.6.10 never reads it (verified against the
