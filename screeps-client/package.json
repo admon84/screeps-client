@@ -28,6 +28,8 @@
   },
   "devDependencies": {
     "@codemirror/autocomplete": "^6.20.2",
+    "@screeps/renderer": "1.6.10",
+    "@screeps/renderer-metadata": "1.6.10",
     "@codemirror/lang-javascript": "^6.2.5",
     "@codemirror/lang-json": "^6.0.2",
     "@codemirror/lint": "^6.9.6",
@@ -51,6 +53,7 @@
     "lucide-solid": "^1.23.0",
     "lz-string": "^1.5.0",
     "pixi.js": "^8.19.0",
+    "pixi7": "npm:pixi.js@7.4.3",
     "screeps-connectivity": "workspace:*",
     "solid-codemirror": "^2.3.3",
     "solid-js": "^1.9.14",

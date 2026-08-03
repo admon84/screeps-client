@@ -24,6 +24,17 @@ export default [
     },
   },
   {
+    files: ['src/roomRenderer/**/*.ts'],
+    rules: {
+      'no-restricted-imports': ['error', {
+        paths: [{
+          name: 'pixi.js',
+          message: 'src/roomRenderer runs the PIXI 7 bundled inside @screeps/renderer (window.PIXI, via pixi7.ts); importing pixi.js v8 here would mix two PIXI versions in one scene graph.',
+        }],
+      }],
+    },
+  },
+  {
     ignores: ['dist/', 'node_modules/'],
   },
 ]

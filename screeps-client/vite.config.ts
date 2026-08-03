@@ -49,6 +49,7 @@ export default defineConfig(({ mode }) => {
         output: {
           manualChunks(id) {
             if (id.includes('/node_modules/pixi.js/')) return 'vendor-pixi'
+            if (id.includes('/node_modules/@screeps/')) return 'vendor-screeps-renderer'
             // solid-codemirror must NOT be listed here: forcing it into the
             // vendor chunk drags its solid-js dependency in with it, and since
             // the whole app needs solid-js the entry chunk then statically
@@ -67,6 +68,11 @@ export default defineConfig(({ mode }) => {
     },
     define: {
       'import.meta.env.VITE_CLIENT_VERSION': JSON.stringify(clientVersion),
+    },
+    optimizeDeps: {
+      // Prebuilt webpack bundles with only a CJS `main` entry; listing them keeps the
+      // CJS->ESM interop stable and avoids a re-optimize on first room mount.
+      include: ['@screeps/renderer', '@screeps/renderer-metadata'],
     },
     server: {
       host: viteHost ? true : undefined,
