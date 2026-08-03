@@ -1,6 +1,17 @@
 # Room Rendering Migration to @screeps/renderer
 
-Status: Phase 1 landed (inert bootstrap). Edit this document as phases land.
+Status: Phases 1-3 landed on the renderer-migration branch. The new view is
+behind the "Official room renderer (experimental)" setting and needs its first
+manual visual pass (Phase 3 checklist below) before Phase 4 starts.
+
+Implementation notes so far:
+- rescaleResources is omitted: v1.6.10 never reads it (verified against the
+  bundle source), so only resourceMap is passed.
+- The manualChunks rule excludes @screeps/renderer-metadata/images/ -- the ?url
+  sprite modules are statically imported via resourceMap.ts, and grouping them
+  into the renderer chunk would modulepreload the whole 858 kB bundle eagerly.
+- setCurrentRoom/Shard moved into useRoomTerrain (used by GameRoomViewer);
+  RoomViewer keeps its inline copy until Phase 7 deletes it.
 
 ## Context
 
