@@ -7,6 +7,7 @@ import {
   showRoomDecorations, setShowRoomDecorations,
   roomDarkOverlay, setRoomDarkOverlay,
   smoothAnimations, setSmoothAnimations,
+  useOfficialRenderer, setUseOfficialRenderer,
   hideCustomUiProtocol, setHideCustomUiProtocol,
 } from '~/stores/settingsStore.js'
 import { clientVersion, embeddedModInfo } from '~/utils/embedded.js'
@@ -265,6 +266,12 @@ export function SettingsPanel(props: { onClose: () => void }) {
               description="Interpolate creep movement and structure fills between game ticks. Turn off for instant, static updates."
               value={smoothAnimations()}
               onChange={setSmoothAnimations}
+            />
+            <Toggle
+              label="Official room renderer (experimental)"
+              description="Render rooms with the official Screeps engine. Tile interaction, room visuals and decorations are not wired up yet; takes effect when the room view remounts."
+              value={useOfficialRenderer()}
+              onChange={setUseOfficialRenderer}
             />
           </Section>
 

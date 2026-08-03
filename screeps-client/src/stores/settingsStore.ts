@@ -19,5 +19,8 @@ export const [showRoomVisuals, setShowRoomVisuals] = boolSetting(LS.showRoomVisu
 // pulses) snap instantly instead of interpolating between ticks. Wall-clock ambient
 // pulses (source glow, tower sweep, keeper-lair glow) are unaffected.
 export const [smoothAnimations, setSmoothAnimations] = boolSetting(LS.smoothAnimations, true)
+// Room view backed by the official @screeps/renderer engine instead of the built-in
+// pipeline. Experimental while the migration is in progress (docs/project/renderer-migration.md).
+export const [useOfficialRenderer, setUseOfficialRenderer] = boolSetting(LS.useOfficialRenderer, false)
 export const [showMapVisuals, setShowMapVisuals] = boolSetting(LS.showMapVisuals, true)
 export const [hideCustomUiProtocol, setHideCustomUiProtocol] = boolSetting(LS.hideCustomUiProtocol, true)

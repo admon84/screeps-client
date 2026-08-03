@@ -2,6 +2,7 @@ import { createEffect, createSignal, lazy, onCleanup, onMount, Show, untrack, ty
 import { Map, Code2, Settings, LogIn, LayoutDashboard, Store, Clock, BarChart3, Trophy, Package } from 'lucide-solid'
 import { ConnectionStatus } from '~/components/ConnectionStatus.js'
 import { RoomViewer } from '~/components/RoomViewer.js'
+import { GameRoomViewer } from '~/components/GameRoomViewer.js'
 import { ToastContainer } from '~/components/ToastContainer.js'
 import type { RoomInfo } from '~/components/MapViewer.js'
 import { ConsolePanel } from '~/components/ConsolePanel.js'
@@ -26,7 +27,7 @@ const MapViewer = lazy(() =>
 import { client, disconnect, isGuest, userInfo, gameTime, isPrivateServer, serverVersion } from '~/stores/clientStore.js'
 import { capabilities } from '~/stores/capabilities.js'
 import { historyMode, historyTick, enterHistoryMode, exitHistoryMode, seekToTick } from '~/stores/historyStore.js'
-import { widescreenMode, showRoomDecorations } from '~/stores/settingsStore.js'
+import { widescreenMode, showRoomDecorations, useOfficialRenderer } from '~/stores/settingsStore.js'
 import { showSegments, setShowSegments, showCustomUiEditor, setShowCustomUiEditor } from '~/stores/consoleStore.js'
 import { setRoomViewMode } from '~/stores/roomViewStore.js'
 import { startDecorationPlacement } from '~/stores/decorationEditStore.js'
@@ -450,7 +451,12 @@ export function Dashboard() {
           />
         }
       >
-        <RoomViewer room={room()} shard={shard()} onNavigate={handleNavigate} />
+        <Show
+          when={useOfficialRenderer()}
+          fallback={<RoomViewer room={room()} shard={shard()} onNavigate={handleNavigate} />}
+        >
+          <GameRoomViewer room={room()} shard={shard()} onNavigate={handleNavigate} />
+        </Show>
         <button
           onClick={() => openMap(room())}
           title="World Map"

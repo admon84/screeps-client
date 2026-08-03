@@ -49,7 +49,10 @@ export default defineConfig(({ mode }) => {
         output: {
           manualChunks(id) {
             if (id.includes('/node_modules/pixi.js/')) return 'vendor-pixi'
-            if (id.includes('/node_modules/@screeps/')) return 'vendor-screeps-renderer'
+            // The images/ exclusion keeps the ?url sprite modules (statically imported via
+            // resourceMap.ts) out of this chunk — grouping them in would make the entry
+            // modulepreload the whole 1 MB renderer bundle even with the feature off.
+            if (id.includes('/node_modules/@screeps/') && !id.includes('/images/')) return 'vendor-screeps-renderer'
             // solid-codemirror must NOT be listed here: forcing it into the
             // vendor chunk drags its solid-js dependency in with it, and since
             // the whole app needs solid-js the entry chunk then statically
