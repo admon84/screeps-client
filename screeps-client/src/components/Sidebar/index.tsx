@@ -16,15 +16,24 @@ import { CustomUiPanel } from './CustomUiPanel.js'
 
 function RoomModePanel(props: { shard?: string | null }) {
   return (
-    <Show when={roomViewMode() === 'flag'} fallback={
-      <Show when={roomViewMode() === 'build'} fallback={
-        <Show when={roomViewMode() === 'decorate'} fallback={<SelectionList />}>
-          <DecoratePanel />
+    <Show
+      when={roomViewMode() === 'flag'}
+      fallback={
+        <Show
+          when={roomViewMode() === 'build'}
+          fallback={
+            <Show
+              when={roomViewMode() === 'decorate'}
+              fallback={<SelectionList />}
+            >
+              <DecoratePanel />
+            </Show>
+          }
+        >
+          <BuildPanel shard={props.shard} />
         </Show>
-      }>
-        <BuildPanel shard={props.shard} />
-      </Show>
-    }>
+      }
+    >
       <FlagForm />
     </Show>
   )
@@ -59,39 +68,39 @@ export function Sidebar(props: SidebarProps) {
         display: 'flex',
         'flex-direction': 'row',
         height: '100%',
-        background: '#0d1117',
+        background: '#0d1117'
       }}
     >
       {/* Collapsed strip – always visible, clickable background */}
-      <div
-        onClick={handleStripClick}
-        style={{
-          width: '32px',
-          height: '100%',
-          display: 'flex',
-          'flex-direction': 'column',
-          'align-items': 'center',
-          'border-right': '1px solid #30363d',
-          padding: '8px 0',
-          cursor: 'pointer',
-        }}
-      >
-        {props.onToggle && (
-          <button
-            onClick={handleButtonClick}
-            style={{
-              background: 'transparent',
-              border: 'none',
-              color: '#8b949e',
-              'font-size': '14px',
-              cursor: 'pointer',
-              padding: '4px',
-            }}
-          >
-            {props.isCollapsed ? '▶' : '◀'}
-          </button>
-        )}
-      </div>
+      {props.isCollapsed && (
+        <div
+          onClick={handleStripClick}
+          style={{
+            width: '32px',
+            height: '100%',
+            display: 'flex',
+            'flex-direction': 'column',
+            'align-items': 'center',
+            padding: '6px 0',
+            cursor: 'pointer'
+          }}
+        >
+          {props.onToggle && (
+            <button
+              onClick={handleButtonClick}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: '#8b949e',
+                'font-size': '12px',
+                cursor: 'pointer'
+              }}
+            >
+              ◀
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Main content – visible when sidebar is wide enough */}
       <div
@@ -99,19 +108,19 @@ export function Sidebar(props: SidebarProps) {
           flex: 1,
           display: 'flex',
           'flex-direction': 'column',
-          overflow: 'hidden',
+          overflow: 'hidden'
         }}
       >
         <div
           style={{
-            padding: '6px 10px',
+            padding: '8px 4px 6px 10px',
             'border-bottom': '1px solid #30363d',
             'font-size': '12px',
             'font-weight': 600,
             color: '#8b949e',
             display: 'flex',
             'justify-content': 'space-between',
-            'align-items': 'center',
+            'align-items': 'center'
           }}
         >
           <span>Properties</span>
@@ -122,19 +131,30 @@ export function Sidebar(props: SidebarProps) {
                 background: 'transparent',
                 border: 'none',
                 color: '#8b949e',
-                'font-size': '11px',
-                cursor: 'pointer',
+                'font-size': '12px',
+                cursor: 'pointer'
               }}
             >
-              Collapse
+              ▶
             </button>
           )}
         </div>
 
-        <Show when={props.mapMode} fallback={
-          <RoomInfoPanel room={props.room ?? '—'} shard={props.shard ?? null} />
-        }>
-          <MapInfoPanel zoom={props.mapZoom} subsActive={props.mapSubsActive} shard={props.shard} onShardChange={props.onShardChange} />
+        <Show
+          when={props.mapMode}
+          fallback={
+            <RoomInfoPanel
+              room={props.room ?? '—'}
+              shard={props.shard ?? null}
+            />
+          }
+        >
+          <MapInfoPanel
+            zoom={props.mapZoom}
+            subsActive={props.mapSubsActive}
+            shard={props.shard}
+            onShardChange={props.onShardChange}
+          />
         </Show>
 
         <Show when={!props.mapMode && historyMode()}>
@@ -152,18 +172,40 @@ export function Sidebar(props: SidebarProps) {
                 <RoomDecorationsPanel />
               </Show>
               <RoomModePanel shard={props.shard} />
-              <CustomUiPanel mode="room" shard={props.shard ?? null} room={props.room} />
+              <CustomUiPanel
+                mode='room'
+                shard={props.shard ?? null}
+                room={props.room}
+              />
             </>
           }
         >
           <>
             {/* Same split as room view: the info boxes take the free space and
                 scroll, so the custom UI stays pinned to the bottom. */}
-            <div style={{ flex: 1, overflow: 'auto', 'min-height': 0, 'padding-bottom': '8px' }}>
-              <RoomInfoBox label="Selected" info={props.selectedRoomInfo ?? null} />
-              <RoomInfoBox label="Cursor" info={props.hoveredRoomInfo ?? null} dim />
+            <div
+              style={{
+                flex: 1,
+                overflow: 'auto',
+                'min-height': 0,
+                'padding-bottom': '8px'
+              }}
+            >
+              <RoomInfoBox
+                label='Selected'
+                info={props.selectedRoomInfo ?? null}
+              />
+              <RoomInfoBox
+                label='Cursor'
+                info={props.hoveredRoomInfo ?? null}
+                dim
+              />
             </div>
-            <CustomUiPanel mode="map" shard={props.shard ?? null} selectedRoomInfo={props.selectedRoomInfo ?? null} />
+            <CustomUiPanel
+              mode='map'
+              shard={props.shard ?? null}
+              selectedRoomInfo={props.selectedRoomInfo ?? null}
+            />
           </>
         </Show>
       </div>

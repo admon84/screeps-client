@@ -50,10 +50,21 @@ export default defineConfig(({ mode }) => {
         output: {
           manualChunks(id) {
             if (id.includes('/node_modules/pixi.js/')) return 'vendor-pixi'
+            // Separate chunks per package, not one merged 'vendor-screeps-renderer' bucket:
+            // loadRenderer.ts's sequential dynamic imports rely on @screeps/renderer's
+            // window.PIXI side effect running before @screeps/renderer-metadata reads it.
+            // Rolldown doesn't honor that runtime await-order when both packages share one
+            // physical chunk -- it lays the chunk out with renderer-metadata's code first,
+            // so its bare `PIXI.Filter` references throw "PIXI is not defined" before
+            // renderer's own module sets the global. Separate chunks load and evaluate in
+            // the order they're dynamically imported.
             // The images/ exclusion keeps the ?url sprite modules (statically imported via
             // resourceMap.ts) out of this chunk — grouping them in would make the entry
             // modulepreload the whole 1 MB renderer bundle even with the feature off.
-            if (id.includes('/node_modules/@screeps/') && !id.includes('/images/')) return 'vendor-screeps-renderer'
+            if (id.includes('/node_modules/@screeps/renderer-metadata/') && !id.includes('/images/')) {
+              return 'vendor-screeps-renderer-metadata'
+            }
+            if (id.includes('/node_modules/@screeps/renderer/')) return 'vendor-screeps-renderer'
             // solid-codemirror must NOT be listed here: forcing it into the
             // vendor chunk drags its solid-js dependency in with it, and since
             // the whole app needs solid-js the entry chunk then statically
