@@ -1,5 +1,26 @@
-import { createEffect, createSignal, lazy, onCleanup, onMount, Show, untrack, type JSX } from 'solid-js'
-import { Map, Code2, Settings, LogIn, LayoutDashboard, Store, Clock, BarChart3, Trophy, Package, ExternalLink } from 'lucide-solid'
+import {
+  createEffect,
+  createSignal,
+  lazy,
+  onCleanup,
+  onMount,
+  Show,
+  untrack,
+  type JSX
+} from 'solid-js'
+import {
+  Map,
+  Code2,
+  Settings,
+  LogIn,
+  NotepadText,
+  BadgeEuro,
+  Clock,
+  BarChart3,
+  Trophy,
+  Package,
+  ExternalLink
+} from 'lucide-solid'
 import { ConnectionStatus } from '~/components/ConnectionStatus.js'
 import { RoomViewer } from '~/components/RoomViewer.js'
 import { GameRoomViewer } from '~/components/GameRoomViewer.js'
@@ -13,28 +34,70 @@ import { MotdOverlay } from '~/components/MotdOverlay.js'
 import { UserMenu } from '~/components/UserMenu.js'
 
 const CodePanel = lazy(() =>
-  import('~/components/CodePanel.js').then((m) => ({ default: m.CodePanel })),
+  import('~/components/CodePanel.js').then(m => ({ default: m.CodePanel }))
 )
 const SegmentsPanel = lazy(() =>
-  import('~/components/SegmentsPanel.js').then((m) => ({ default: m.SegmentsPanel })),
+  import('~/components/SegmentsPanel.js').then(m => ({
+    default: m.SegmentsPanel
+  }))
 )
 const CustomUiEditor = lazy(() =>
-  import('~/components/CustomUiEditor.js').then((m) => ({ default: m.CustomUiEditor })),
+  import('~/components/CustomUiEditor.js').then(m => ({
+    default: m.CustomUiEditor
+  }))
 )
 const MapViewer = lazy(() =>
-  import('~/components/MapViewer.js').then((m) => ({ default: m.MapViewer })),
+  import('~/components/MapViewer.js').then(m => ({ default: m.MapViewer }))
 )
-import { client, disconnect, isGuest, userInfo, gameTime, isPrivateServer, serverVersion } from '~/stores/clientStore.js'
-import { broadcastMapClose, initPopoutHost, mapCloseRequests, openPopoutWindow, popoutHostReady, popoutSid } from '~/popout/host.js'
+import {
+  client,
+  disconnect,
+  isGuest,
+  userInfo,
+  gameTime,
+  isPrivateServer,
+  serverVersion
+} from '~/stores/clientStore.js'
+import {
+  broadcastMapClose,
+  initPopoutHost,
+  mapCloseRequests,
+  openPopoutWindow,
+  popoutHostReady,
+  popoutSid
+} from '~/popout/host.js'
 import { isTauri } from '~/utils/tauri.js'
 import { capabilities } from '~/stores/capabilities.js'
-import { historyMode, historyTick, enterHistoryMode, exitHistoryMode, seekToTick } from '~/stores/historyStore.js'
-import { widescreenMode, showRoomDecorations, useOfficialRenderer } from '~/stores/settingsStore.js'
-import { showSegments, setShowSegments, showCustomUiEditor, setShowCustomUiEditor } from '~/stores/consoleStore.js'
+import {
+  historyMode,
+  historyTick,
+  enterHistoryMode,
+  exitHistoryMode,
+  seekToTick
+} from '~/stores/historyStore.js'
+import {
+  widescreenMode,
+  showRoomDecorations,
+  useOfficialRenderer
+} from '~/stores/settingsStore.js'
+import {
+  showSegments,
+  setShowSegments,
+  showCustomUiEditor,
+  setShowCustomUiEditor
+} from '~/stores/consoleStore.js'
 import { setRoomViewMode } from '~/stores/roomViewStore.js'
 import { startDecorationPlacement } from '~/stores/decorationEditStore.js'
 import { initCustomUi, disposeCustomUi } from '~/stores/customUiStore.js'
-import { route, goToUser, goToGame, goToMarket, goToRoomOverview, goToLeaderboard, goToInventory } from '~/stores/routeStore.js'
+import {
+  route,
+  goToUser,
+  goToGame,
+  goToMarket,
+  goToRoomOverview,
+  goToLeaderboard,
+  goToInventory
+} from '~/stores/routeStore.js'
 import { Overview } from '~/components/Overview.js'
 import { Profile } from '~/components/Profile.js'
 import { RoomOverview } from '~/components/RoomOverview.js'
@@ -45,13 +108,33 @@ import { Inventory } from '~/components/inventory/Inventory.js'
 import { BadgePickerModal } from '~/components/BadgePickerModal.js'
 import type { Badge } from 'screeps-connectivity'
 
-const DEFAULT_BADGE: Badge = { type: 1, color1: '#4a5060', color2: '#7a9ec0', color3: '#c0daf0', param: 0, flip: false }
+const DEFAULT_BADGE: Badge = {
+  type: 1,
+  color1: '#4a5060',
+  color2: '#7a9ec0',
+  color3: '#c0daf0',
+  param: 0,
+  flip: false
+}
 
 import { parseRoomName } from '~/utils/roomName.js'
 import { basePath } from '~/utils/embedded.js'
-import { buildMapUrl, buildRoomUrl, mapViewQuery, parseMapView, type MapView } from '~/utils/gameRoutes.js'
+import {
+  buildMapUrl,
+  buildRoomUrl,
+  mapViewQuery,
+  parseMapView,
+  type MapView
+} from '~/utils/gameRoutes.js'
 import { isTypingTarget } from '~/utils/dom.js'
-import { LS, getStr, setStr, removeLocal, getNum, setNum } from '~/utils/storage.js'
+import {
+  LS,
+  getStr,
+  setStr,
+  removeLocal,
+  getNum,
+  setNum
+} from '~/utils/storage.js'
 
 // Shard used to live in the ?shard query; it now sits in the path. Still read
 // the query as a fallback so old bookmarks keep resolving to the right shard.
@@ -59,14 +142,19 @@ function legacyQueryShard(): string | null {
   return new URLSearchParams(window.location.search).get('shard')
 }
 
-function parseRoomUrl(): { room: string | null; shard: string | null; tick: number | null } {
+function parseRoomUrl(): {
+  room: string | null
+  shard: string | null
+  tick: number | null
+} {
   const prefix = `${basePath()}/room/`
   const path = window.location.pathname
   if (!path.startsWith(prefix)) return { room: null, shard: null, tick: null }
   const segments = path.slice(prefix.length).split('/').filter(Boolean)
   // /room/<room> or /room/<shard>/<room>
   const roomSeg = segments.length >= 2 ? segments[1] : segments[0]
-  const pathShard = segments.length >= 2 ? decodeURIComponent(segments[0]) : null
+  const pathShard =
+    segments.length >= 2 ? decodeURIComponent(segments[0]) : null
   if (!roomSeg) return { room: null, shard: null, tick: null }
   const room = roomSeg.toUpperCase()
   if (!parseRoomName(room)) return { room: null, shard: null, tick: null }
@@ -82,7 +170,10 @@ function parseMapUrl(): { shard: string | null; view: MapView } | null {
   if (path !== mapPath && !path.startsWith(`${mapPath}/`)) return null
   const rest = path.slice(mapPath.length).replace(/^\//, '')
   const pathShard = rest ? decodeURIComponent(rest.split('/')[0]) : null
-  return { shard: pathShard ?? legacyQueryShard(), view: parseMapView(window.location.search) }
+  return {
+    shard: pathShard ?? legacyQueryShard(),
+    view: parseMapView(window.location.search)
+  }
 }
 
 function HeaderButton(props: {
@@ -98,15 +189,19 @@ function HeaderButton(props: {
       disabled={props.disabled}
       onClick={() => props.onClick()}
       style={{
-        padding: '7px',
+        padding: '5px',
         'border-radius': '4px',
         border: `1px solid ${props.active ? '#388bfd' : '#30363d'}`,
         background: props.active ? '#1f3158' : '#21262d',
-        color: props.disabled ? '#484f58' : props.active ? '#58a6ff' : '#c9d1d9',
+        color: props.disabled
+          ? '#484f58'
+          : props.active
+          ? '#58a6ff'
+          : '#c9d1d9',
         cursor: props.disabled ? 'default' : 'pointer',
-        margin: '0 4px',
+        margin: '2px 1px',
         display: 'flex',
-        'align-items': 'center',
+        'align-items': 'center'
       }}
     >
       {props.children}
@@ -114,33 +209,47 @@ function HeaderButton(props: {
   )
 }
 
-
 export function Dashboard() {
   const urlState = parseRoomUrl()
   const initialMapUrl = parseMapUrl()
-  const [room, setRoom] = createSignal(urlState.room ?? getStr(LS.room) ?? 'W1N1')
-  const [shard, setShard] = createSignal<string | null>(urlState.shard ?? getStr(LS.shard))
-  const [mapMode, setMapMode] = createSignal(initialMapUrl !== null || !urlState.room)
+  const [room, setRoom] = createSignal(
+    urlState.room ?? getStr(LS.room) ?? 'W1N1'
+  )
+  const [shard, setShard] = createSignal<string | null>(
+    urlState.shard ?? getStr(LS.shard)
+  )
+  const [mapMode, setMapMode] = createSignal(
+    initialMapUrl !== null || !urlState.room
+  )
 
   // Two one-way channels between the map camera and the URL, deliberately not
   // one signal: `mapCenterPos` is URL → map (deep link, back/forward) and is only
   // ever written from a URL read, `mapView` is map → URL. Feeding panning back
   // into mapCenterPos would have the map fighting its own camera.
-  const [mapCenterPos, setMapCenterPos] = createSignal<{ x: number; y: number } | null>(initialMapUrl?.view.pos ?? null)
-  const [mapView, setMapView] = createSignal<MapView | null>(initialMapUrl?.view ?? null)
+  const [mapCenterPos, setMapCenterPos] = createSignal<{
+    x: number
+    y: number
+  } | null>(initialMapUrl?.view.pos ?? null)
+  const [mapView, setMapView] = createSignal<MapView | null>(
+    initialMapUrl?.view ?? null
+  )
 
   // Server message-of-the-day, shown once over the map for guest sessions after
   // connecting. Dismissed manually or by its own timer; never re-shown afterwards.
   const motdText = () => serverVersion()?.serverData?.welcomeText ?? null
   const [motdDismissed, setMotdDismissed] = createSignal(false)
-  const showMotd = () => isGuest() && mapMode() && !motdDismissed() && motdText() !== null
+  const showMotd = () =>
+    isGuest() && mapMode() && !motdDismissed() && motdText() !== null
 
   const [showSettings, setShowSettings] = createSignal(false)
-  const [showBadgePicker, setShowBadgePicker] = createSignal(!isGuest() && !userInfo()?.badge)
+  const [showBadgePicker, setShowBadgePicker] = createSignal(
+    !isGuest() && !userInfo()?.badge
+  )
   const [showCode, setShowCode] = createSignal(false)
   // Suppresses sidebar transition for one render cycle whenever a full-canvas
   // overlay toggles, so both open and close are instant with no CSS animation.
-  const [suppressSidebarTransition, setSuppressSidebarTransition] = createSignal(false)
+  const [suppressSidebarTransition, setSuppressSidebarTransition] =
+    createSignal(false)
   createEffect(() => {
     showCode() // track
     showSegments() // track
@@ -152,13 +261,24 @@ export function Dashboard() {
   // Code editor, segments and custom-UI overlays are mutually exclusive —
   // opening one closes the others (all cover the full canvas area).
   createEffect(() => {
-    if (showSegments()) { setShowCode(false); setShowSettings(false); setShowCustomUiEditor(false) }
+    if (showSegments()) {
+      setShowCode(false)
+      setShowSettings(false)
+      setShowCustomUiEditor(false)
+    }
   })
   createEffect(() => {
-    if (showCode()) { setShowSegments(false); setShowCustomUiEditor(false) }
+    if (showCode()) {
+      setShowSegments(false)
+      setShowCustomUiEditor(false)
+    }
   })
   createEffect(() => {
-    if (showCustomUiEditor()) { setShowCode(false); setShowSegments(false); setShowSettings(false) }
+    if (showCustomUiEditor()) {
+      setShowCode(false)
+      setShowSegments(false)
+      setShowSettings(false)
+    }
   })
 
   // Guest sessions are read-only: force the room view back to 'view' so the
@@ -174,18 +294,26 @@ export function Dashboard() {
     if (firstShard) setShard(firstShard)
   })
 
-  const [mapOriginRoom, setMapOriginRoom] = createSignal<string | undefined>(undefined)
-  const [hoveredRoomInfo, setHoveredRoomInfo] = createSignal<RoomInfo | null>(null)
-  const [selectedRoomInfo, setSelectedRoomInfo] = createSignal<RoomInfo | null>(null)
+  const [mapOriginRoom, setMapOriginRoom] = createSignal<string | undefined>(
+    undefined
+  )
+  const [hoveredRoomInfo, setHoveredRoomInfo] = createSignal<RoomInfo | null>(
+    null
+  )
+  const [selectedRoomInfo, setSelectedRoomInfo] = createSignal<RoomInfo | null>(
+    null
+  )
   const savedMapZoom = getStr(LS.mapZoom)
   const [mapZoom, setMapZoom] = createSignal<number | null>(
-    initialMapUrl?.view.zoom ?? (urlState.room && savedMapZoom ? Number(savedMapZoom) : null),
+    initialMapUrl?.view.zoom ??
+      (urlState.room && savedMapZoom ? Number(savedMapZoom) : null)
   )
   const [mapSubsActive, setMapSubsActive] = createSignal<boolean | null>(null)
   // Size of a history chunk, mirroring the fallback in RoomViewer (private servers
   // default to 20, the official server to 100).
   const historyChunkSize = () =>
-    serverVersion()?.serverData?.historyChunkSize ?? ((isPrivateServer() ?? true) ? 20 : 100)
+    serverVersion()?.serverData?.historyChunkSize ??
+    (isPrivateServer() ?? true ? 20 : 100)
 
   // Consumed once when gameTime first becomes available
   let pendingHistoryTick: number | null = urlState.tick
@@ -194,7 +322,11 @@ export function Dashboard() {
     if (t === null || pendingHistoryTick === null) return
     const targetTick = pendingHistoryTick
     pendingHistoryTick = null
-    enterHistoryMode(t, serverVersion()?.serverData?.historyKeepTicks, historyChunkSize())
+    enterHistoryMode(
+      t,
+      serverVersion()?.serverData?.historyKeepTicks,
+      historyChunkSize()
+    )
     seekToTick(targetTick)
   })
 
@@ -236,10 +368,18 @@ export function Dashboard() {
     history.replaceState(null, '', buildMapUrl(shard(), view))
   })
 
-  const [sidebarWidth, setSidebarWidth] = createSignal(getNum(LS.sidebarWidth, 300))
-  const [sidebarPrevWidth, setSidebarPrevWidth] = createSignal(getNum(LS.sidebarWidth, 300))
-  const [consoleHeight, setConsoleHeight] = createSignal(getNum(LS.consoleHeight, 220))
-  const [consolePrevHeight, setConsolePrevHeight] = createSignal(getNum(LS.consoleHeight, 220))
+  const [sidebarWidth, setSidebarWidth] = createSignal(
+    getNum(LS.sidebarWidth, 300)
+  )
+  const [sidebarPrevWidth, setSidebarPrevWidth] = createSignal(
+    getNum(LS.sidebarWidth, 300)
+  )
+  const [consoleHeight, setConsoleHeight] = createSignal(
+    getNum(LS.consoleHeight, 220)
+  )
+  const [consolePrevHeight, setConsolePrevHeight] = createSignal(
+    getNum(LS.consoleHeight, 220)
+  )
   const [sidebarDragging, setSidebarDragging] = createSignal(false)
   const [consoleDragging, setConsoleDragging] = createSignal(false)
 
@@ -344,7 +484,7 @@ export function Dashboard() {
   // Clicking a room in an overlay route (Overview, Profile, …) pushes the new
   // /room URL and flips route back to 'game', but leaves our view signals stale.
   // Re-read the URL on that transition so the correct room actually loads.
-  createEffect((prev) => {
+  createEffect(prev => {
     const r = route()
     if (r === 'game' && prev !== undefined && prev !== 'game') syncViewFromUrl()
     return r
@@ -375,7 +515,11 @@ export function Dashboard() {
     const c = client()
     const sid = popoutSid()
     if (!c || !sid) return
-    onCleanup(initPopoutHost(c, sid, { session: () => ({ room: room(), shard: shard() }) }))
+    onCleanup(
+      initPopoutHost(c, sid, {
+        session: () => ({ room: room(), shard: shard() })
+      })
+    )
   })
 
   // Only one map at a time, in whichever window: entering map mode here tells a
@@ -408,7 +552,7 @@ export function Dashboard() {
       shard: shard(),
       room: room(),
       extraQuery: mapViewQuery(mapView() ?? undefined),
-      features: 'popup,width=1280,height=800',
+      features: 'popup,width=1280,height=800'
     })
     setMapMode(false)
     history.pushState(null, '', buildRoomUrl(room(), shard()))
@@ -430,7 +574,7 @@ export function Dashboard() {
 
     const nav = client()?.stores.navigation
     if (nav) {
-      const navSub = nav.on('navigation:change', (state) => {
+      const navSub = nav.on('navigation:change', state => {
         if (state.room === null) return
         if (untrack(historyMode)) exitHistoryMode()
         setRoom(state.room)
@@ -449,7 +593,7 @@ export function Dashboard() {
     const onKeyDown = (e: KeyboardEvent) => {
       if (isTypingTarget(e.target)) return
       if (e.key === 'o' || e.key === 'O') {
-        setShowCode((v) => !v)
+        setShowCode(v => !v)
         setShowSettings(false)
         return
       }
@@ -458,7 +602,12 @@ export function Dashboard() {
         if (!isGuest()) {
           if (e.key === '2') setRoomViewMode('flag')
           if (e.key === '3') setRoomViewMode('build')
-          if (e.key === '4' && capabilities().hasInventory && showRoomDecorations()) startDecorationPlacement()
+          if (
+            e.key === '4' &&
+            capabilities().hasInventory &&
+            showRoomDecorations()
+          )
+            startDecorationPlacement()
         }
         if (e.key === 'm') openMap(room())
       }
@@ -487,11 +636,13 @@ export function Dashboard() {
               originRoom={mapOriginRoom()}
               initialZoom={mapZoom() ?? undefined}
               centerPos={mapCenterPos() ?? undefined}
-              onNavigateToRoom={(r) => handleNavigate(r, shard())}
+              onNavigateToRoom={r => handleNavigate(r, shard())}
               onHoveredRoomChanged={setHoveredRoomInfo}
               onSelectedRoomChanged={setSelectedRoomInfo}
-              onCenterChanged={(pos) => setMapView({ pos, zoom: untrack(mapZoom) })}
-              onZoomChanged={(z) => {
+              onCenterChanged={pos =>
+                setMapView({ pos, zoom: untrack(mapZoom) })
+              }
+              onZoomChanged={z => {
                 setMapZoom(z)
                 setNum(LS.mapZoom, z)
               }}
@@ -500,7 +651,7 @@ export function Dashboard() {
             <Show when={!isTauri() && popoutSid()}>
               <button
                 onClick={openMapPopout}
-                title="Open map in a separate window"
+                title='Open map in a separate window'
                 style={{
                   position: 'absolute',
                   top: '8px',
@@ -513,7 +664,7 @@ export function Dashboard() {
                   color: '#c9d1d9',
                   cursor: 'pointer',
                   display: 'flex',
-                  'align-items': 'center',
+                  'align-items': 'center'
                 }}
               >
                 <ExternalLink size={24} />
@@ -524,13 +675,23 @@ export function Dashboard() {
       >
         <Show
           when={useOfficialRenderer()}
-          fallback={<RoomViewer room={room()} shard={shard()} onNavigate={handleNavigate} />}
+          fallback={
+            <RoomViewer
+              room={room()}
+              shard={shard()}
+              onNavigate={handleNavigate}
+            />
+          }
         >
-          <GameRoomViewer room={room()} shard={shard()} onNavigate={handleNavigate} />
+          <GameRoomViewer
+            room={room()}
+            shard={shard()}
+            onNavigate={handleNavigate}
+          />
         </Show>
         <button
           onClick={() => openMap(room())}
-          title="World Map"
+          title='World Map'
           style={{
             position: 'absolute',
             top: '8px',
@@ -543,14 +704,14 @@ export function Dashboard() {
             color: '#c9d1d9',
             cursor: 'pointer',
             display: 'flex',
-            'align-items': 'center',
+            'align-items': 'center'
           }}
         >
           <Map size={24} />
         </button>
         <button
           onClick={() => goToRoomOverview(room(), shard())}
-          title="Room overview"
+          title='Room overview'
           style={{
             position: 'absolute',
             top: '66px',
@@ -563,16 +724,25 @@ export function Dashboard() {
             color: '#c9d1d9',
             cursor: 'pointer',
             display: 'flex',
-            'align-items': 'center',
+            'align-items': 'center'
           }}
         >
           <BarChart3 size={24} />
         </button>
         <Show when={capabilities().hasHistory}>
           <button
-            onClick={() => (historyMode() ? exitHistoryMode() : gameTime() !== null && enterHistoryMode(gameTime()!, serverVersion()?.serverData?.historyKeepTicks, historyChunkSize()))}
+            onClick={() =>
+              historyMode()
+                ? exitHistoryMode()
+                : gameTime() !== null &&
+                  enterHistoryMode(
+                    gameTime()!,
+                    serverVersion()?.serverData?.historyKeepTicks,
+                    historyChunkSize()
+                  )
+            }
             disabled={!historyMode() && gameTime() === null}
-            title="History"
+            title='History'
             style={{
               position: 'absolute',
               top: '124px',
@@ -581,12 +751,17 @@ export function Dashboard() {
               padding: '12px',
               'border-radius': '6px',
               border: `1px solid ${historyMode() ? '#58a6ff' : '#30363d'}`,
-              background: historyMode() ? 'rgba(31,111,235,0.85)' : 'rgba(33,38,45,0.85)',
+              background: historyMode()
+                ? 'rgba(31,111,235,0.85)'
+                : 'rgba(33,38,45,0.85)',
               color: '#c9d1d9',
-              cursor: !historyMode() && gameTime() === null ? 'not-allowed' : 'pointer',
+              cursor:
+                !historyMode() && gameTime() === null
+                  ? 'not-allowed'
+                  : 'pointer',
               display: 'flex',
               'align-items': 'center',
-              opacity: !historyMode() && gameTime() === null ? 0.4 : 1,
+              opacity: !historyMode() && gameTime() === null ? 0.4 : 1
             }}
           >
             <Clock size={24} />
@@ -594,7 +769,10 @@ export function Dashboard() {
         </Show>
       </Show>
       <Show when={showMotd()}>
-        <MotdOverlay text={motdText()!} onClose={() => setMotdDismissed(true)} />
+        <MotdOverlay
+          text={motdText()!}
+          onClose={() => setMotdDismissed(true)}
+        />
       </Show>
     </div>
   )
@@ -607,14 +785,27 @@ export function Dashboard() {
           'border-top': '1px solid #30363d',
           transition: consoleDragging() ? 'none' : 'height 0.15s ease',
           overflow: 'hidden',
-          position: 'relative',
+          position: 'relative'
         }}
       >
         <div
           onPointerDown={startConsoleDrag}
-          style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '4px', cursor: 'row-resize', 'z-index': 10, background: '#21262d' }}
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            width: '100%',
+            height: '4px',
+            cursor: 'row-resize',
+            'z-index': 10,
+            background: '#21262d'
+          }}
         />
-        <ConsolePanel shard={shard()} isCollapsed={consoleCollapsed()} onToggle={toggleConsole} />
+        <ConsolePanel
+          shard={shard()}
+          isCollapsed={consoleCollapsed()}
+          onToggle={toggleConsole}
+        />
       </div>
     </Show>
   )
@@ -624,16 +815,31 @@ export function Dashboard() {
   const sidebarArea = (animate: boolean) => (
     <div
       style={{
-        width: showCode() || showSegments() || showCustomUiEditor() ? '0' : `${sidebarWidth()}px`,
+        width:
+          showCode() || showSegments() || showCustomUiEditor()
+            ? '0'
+            : `${sidebarWidth()}px`,
         'border-left': '1px solid #30363d',
-        transition: animate && !(suppressSidebarTransition() || sidebarDragging()) ? 'width 0.15s ease' : 'none',
+        transition:
+          animate && !(suppressSidebarTransition() || sidebarDragging())
+            ? 'width 0.15s ease'
+            : 'none',
         overflow: 'hidden',
-        position: 'relative',
+        position: 'relative'
       }}
     >
       <div
         onPointerDown={startSidebarDrag}
-        style={{ position: 'absolute', top: 0, left: 0, width: '4px', height: '100%', cursor: 'col-resize', 'z-index': 10, background: '#21262d' }}
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          width: '4px',
+          height: '100%',
+          cursor: 'col-resize',
+          'z-index': 10,
+          background: '#21262d'
+        }}
       />
       <Sidebar
         isCollapsed={sidebarCollapsed()}
@@ -658,11 +864,17 @@ export function Dashboard() {
         display: 'flex',
         'flex-direction': 'column',
         overflow: 'hidden',
-        background: '#0d1117',
+        background: '#0d1117'
       }}
     >
       {/* Header */}
-      <div style={{ display: 'flex', 'border-bottom': '1px solid #30363d', 'align-items': 'center' }}>
+      <div
+        style={{
+          display: 'flex',
+          'border-bottom': '1px solid #30363d',
+          'align-items': 'center'
+        }}
+      >
         <ConnectionStatus />
         <Show when={!isGuest() || mapMode()}>
           <StatsBar
@@ -675,38 +887,56 @@ export function Dashboard() {
           title={route() === 'user' ? 'Close overview' : 'Overview'}
           active={route() === 'user'}
           disabled={isGuest()}
-          onClick={() => route() === 'user' ? goToGame() : goToUser()}
+          onClick={() => (route() === 'user' ? goToGame() : goToUser())}
         >
-          <LayoutDashboard size={16} />
+          <NotepadText size={16} />
         </HeaderButton>
         <Show when={!isGuest() && capabilities().hasMarket}>
           <HeaderButton
             title={route() === 'market' ? 'Close Market' : 'Market'}
             active={route() === 'market'}
-            onClick={() => route() === 'market' ? goToGame() : goToMarket(shard(), mapMode() ? null : room())}
+            onClick={() =>
+              route() === 'market'
+                ? goToGame()
+                : goToMarket(shard(), mapMode() ? null : room())
+            }
           >
-            <Store size={16} />
+            <BadgeEuro size={16} />
           </HeaderButton>
         </Show>
         <Show when={!isGuest() && capabilities().hasInventory}>
           <HeaderButton
             title={route() === 'inventory' ? 'Close Inventory' : 'Inventory'}
             active={route() === 'inventory'}
-            onClick={() => route() === 'inventory' ? goToGame() : goToInventory()}
+            onClick={() =>
+              route() === 'inventory' ? goToGame() : goToInventory()
+            }
           >
             <Package size={16} />
           </HeaderButton>
         </Show>
         {/* Rankings are public, so guests get this one too. */}
         <HeaderButton
-          title={route() === 'leaderboard' ? 'Close Leaderboard' : 'Leaderboard'}
+          title={
+            route() === 'leaderboard' ? 'Close Leaderboard' : 'Leaderboard'
+          }
           active={route() === 'leaderboard'}
-          onClick={() => route() === 'leaderboard' ? goToGame() : goToLeaderboard()}
+          onClick={() =>
+            route() === 'leaderboard' ? goToGame() : goToLeaderboard()
+          }
         >
           <Trophy size={16} />
         </HeaderButton>
         <Show when={!isGuest()}>
-          <HeaderButton title="Code Editor" active={showCode()} onClick={() => { if (route() !== 'game') goToGame(); setShowCode((v) => !v); setShowSettings(false) }}>
+          <HeaderButton
+            title='Code Editor'
+            active={showCode()}
+            onClick={() => {
+              if (route() !== 'game') goToGame()
+              setShowCode(v => !v)
+              setShowSettings(false)
+            }}
+          >
             <Code2 size={16} />
           </HeaderButton>
         </Show>
@@ -714,11 +944,19 @@ export function Dashboard() {
           when={!isGuest()}
           fallback={
             <>
-              <HeaderButton title="Settings" active={showSettings()} onClick={() => { if (route() !== 'game') goToGame(); setShowSettings((v) => !v); setShowCode(false) }}>
+              <HeaderButton
+                title='Settings'
+                active={showSettings()}
+                onClick={() => {
+                  if (route() !== 'game') goToGame()
+                  setShowSettings(v => !v)
+                  setShowCode(false)
+                }}
+              >
                 <Settings size={16} />
               </HeaderButton>
               <button
-                title="Login"
+                title='Login'
                 onClick={disconnect}
                 style={{
                   padding: '7px',
@@ -729,7 +967,7 @@ export function Dashboard() {
                   cursor: 'pointer',
                   margin: '0 16px 0 8px',
                   display: 'flex',
-                  'align-items': 'center',
+                  'align-items': 'center'
                 }}
               >
                 <LogIn size={16} />
@@ -738,19 +976,38 @@ export function Dashboard() {
           }
         >
           <UserMenu
-            onOpenSettings={() => { if (route() !== 'game') goToGame(); setShowSettings(true); setShowCode(false) }}
+            onOpenSettings={() => {
+              if (route() !== 'game') goToGame()
+              setShowSettings(true)
+              setShowCode(false)
+            }}
             onOpenBadgePicker={() => setShowBadgePicker(true)}
           />
         </Show>
       </div>
 
       {/* Main body — game canvas stays mounted; overview/profile appear as an absolute overlay */}
-      <div style={{ flex: 1, position: 'relative', overflow: 'hidden', display: 'flex', 'flex-direction': 'column' }}>
+      <div
+        style={{
+          flex: 1,
+          position: 'relative',
+          overflow: 'hidden',
+          display: 'flex',
+          'flex-direction': 'column'
+        }}
+      >
         <Show
           when={widescreenMode()}
           fallback={
             /* Normal mode: console spans full width below canvas+sidebar */
-            <div style={{ display: 'flex', 'flex-direction': 'column', flex: 1, overflow: 'hidden' }}>
+            <div
+              style={{
+                display: 'flex',
+                'flex-direction': 'column',
+                flex: 1,
+                overflow: 'hidden'
+              }}
+            >
               <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
                 {canvasArea()}
                 {sidebarArea(true)}
@@ -761,23 +1018,67 @@ export function Dashboard() {
         >
           {/* Widescreen mode: sidebar spans full height, console below canvas only */}
           <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-            <div style={{ display: 'flex', 'flex-direction': 'column', flex: 1, overflow: 'hidden' }}>
+            <div
+              style={{
+                display: 'flex',
+                'flex-direction': 'column',
+                flex: 1,
+                overflow: 'hidden'
+              }}
+            >
               {canvasArea()}
               {consoleArea()}
             </div>
             {sidebarArea(false)}
           </div>
         </Show>
-        <Show when={route() === 'user' || route() === 'profile' || route() === 'messages' || route() === 'market' || route() === 'room-overview' || route() === 'leaderboard' || route() === 'inventory' || showSettings()}>
-          <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, 'z-index': 10, overflow: 'hidden' }}>
-            <Show when={route() === 'user'}><Overview /></Show>
-            <Show when={route() === 'profile'}><Profile /></Show>
-            <Show when={route() === 'messages'}><Messages /></Show>
-            <Show when={route() === 'market'}><Market /></Show>
-            <Show when={route() === 'leaderboard'}><Leaderboard /></Show>
-            <Show when={route() === 'inventory'}><Inventory /></Show>
-            <Show when={route() === 'room-overview'}><RoomOverview /></Show>
-            <Show when={showSettings()}><SettingsPanel onClose={() => setShowSettings(false)} /></Show>
+        <Show
+          when={
+            route() === 'user' ||
+            route() === 'profile' ||
+            route() === 'messages' ||
+            route() === 'market' ||
+            route() === 'room-overview' ||
+            route() === 'leaderboard' ||
+            route() === 'inventory' ||
+            showSettings()
+          }
+        >
+          <div
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              'z-index': 10,
+              overflow: 'hidden'
+            }}
+          >
+            <Show when={route() === 'user'}>
+              <Overview />
+            </Show>
+            <Show when={route() === 'profile'}>
+              <Profile />
+            </Show>
+            <Show when={route() === 'messages'}>
+              <Messages />
+            </Show>
+            <Show when={route() === 'market'}>
+              <Market />
+            </Show>
+            <Show when={route() === 'leaderboard'}>
+              <Leaderboard />
+            </Show>
+            <Show when={route() === 'inventory'}>
+              <Inventory />
+            </Show>
+            <Show when={route() === 'room-overview'}>
+              <RoomOverview />
+            </Show>
+            <Show when={showSettings()}>
+              <SettingsPanel onClose={() => setShowSettings(false)} />
+            </Show>
           </div>
         </Show>
       </div>
