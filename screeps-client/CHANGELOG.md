@@ -1,5 +1,74 @@
 # screeps-client
 
+## 0.24.0
+
+### Minor Changes
+
+- 01a3551: Offer badge symbols granted by decorations in the badge editor. A worn `badge`-type decoration (xxscreeps decorations mod) grants an svg symbol; the badge editor now lists those beside the 24 numbered shapes and saves them through the existing `/api/user/badge` route. `ApiRoomDecorationDef` gained the `badge` field and the `BadgeSymbol` type is exported.
+- 7d2e2f4: Add a "Disable email notifications" checkbox to the OAuth registration form (Steam, Discord, ...). Mirrors the official client's registration option, but instead of dropping the email entirely it posts `{ disabled: true }` to `/api/user/notify-prefs` right after `set-username`, so the address stays on the account for login/recovery while notification emails are off from day one. `setNotifyPrefsWithToken` is exported from screeps-connectivity for bare-token use before a client session exists; the call is best-effort and never blocks the login.
+- e74c83c: Upload and manage binary WebAssembly modules in the code editor. The module list gains an upload button for `.wasm` files; a binary module shows up as `<name>.wasm` and opens a summary panel (size, download, replace) instead of the text editor. On save it is sent through `/api/user/code` as a `{ binary: <base64> }` value, the format the official server stores WASM modules in. screeps-connectivity now types the code endpoints: `code.get` returns the new `ApiUserCodeResponse`, and `code.set` plus the `user:code` socket event carry `ApiCodeModule` (`string | { binary: string }`) — both types are exported.
+
+### Patch Changes
+
+- 40f5076: Room renderer fixes and cleanups:
+
+  - Storage, container, terminal, lab, nuker, powerSpawn, extractor and factory visuals now update during history playback and full reconciles — the diff and full update paths share one per-object update function.
+  - Right/middle clicks no longer count as tile clicks or start a pan; navigation arrows trigger on tap instead of pointer-down, so a touch drag starting on one pans instead of navigating.
+  - The PixiJS application is destroyed instead of leaking a WebGL context when the room view unmounts while the renderer is still initialising.
+  - Canvas selection rings/boxes now follow the selection store, so a selected creep dying or a sidebar deselect clears its overlay.
+  - Room updates apply their signals in one batch, so the render effect runs once per tick instead of several times.
+  - Enabling the dark overlay builds the lightmap immediately instead of waiting up to a tick.
+  - A failed flag move restores the flag at its previous position instead of silently deleting it.
+  - The per-frame ticker consolidates its object loops, and the zoom limit is a single constant.
+
+## 0.23.0
+
+### Minor Changes
+
+- 1accbd8: Console, log and memory panes can now pop out into separate browser windows.
+  Popouts don't open their own server connection: the main window serves them
+  over a BroadcastChannel RPC bridge and they reattach automatically after a
+  main-window reload. Memory watches now always load their values typed over
+  HTTP — the string-coerced WS payload only acts as a change signal — fixing
+  the display of strings vs numbers, arrays, and keys deleted from Memory.
+  Array elements are editable: bracket paths (`list[3]`) map to the dot form
+  the server's path resolution understands.
+- 3d31ab2: The popped-out world map now shows the custom UI at the bottom of its sidebar,
+  like the inline map does. The popout loads the config segment, sends commands
+  and receives their console answers over the existing host bridge, shows the
+  resulting toasts in its own window, and hands a response's room over to the
+  main window's room view. A popout opened by hand in a new tab picks up the
+  per-server custom UI setting from the host, which it previously could not see.
+- ae911fa: The world map can now pop out into a separate browser window or tab, with a
+  collapsible sidebar carrying the overlay controls and room info boxes. The
+  popout replaces the inline map — only one map exists at a time: opening the
+  map in the main window closes the popout and vice versa. Selecting a room
+  twice on the popped-out map navigates the main window's room view, and
+  navigating the room view moves the popout's highlighted room in return.
+  Popout hosts now answer every ping with a heartbeat, so a popout no longer
+  reports the main window as unreachable while that window sits in a throttled
+  background tab.
+
+### Patch Changes
+
+- 0b62464: The Custom UI editor now offers only the options the respective sidebar actually
+  evaluates. The map section drops the `selection` and `tile` requirements, which
+  it can never satisfy, and the `showIf.selType` field, which it never tests — both
+  previously produced elements that stayed disabled or never appeared at all. The
+  objects section drops `needs` entirely, since an object card ignores it. Configs
+  are normalized on load, so form, preview and JSON view always agree; the parser
+  stays tolerant, so existing segments keep loading.
+- 3020fec: Swamp tiles are drawn with their border again. The decoration's
+  `swampStrokeColor` and `swampStrokeWidth` were parsed and resolved but never
+  reached a draw call, so only the fill was painted — and at alpha 0.4 over a
+  dark themed floor that fill is nearly invisible, which made swamps look as if
+  they were hidden underneath the ground. The swamp shape now gets the same
+  stroke-then-fill pass the wall shape already used. Its translucency comes from
+  an `AlphaFilter` rather than `Graphics.alpha`, because plain alpha is applied
+  per-vertex: the translucent fill would blend with the border strokes beneath it
+  instead of covering them, outlining every quadrant sub-path and showing the
+  seams through as a grid.
+
 ## 0.22.0
 
 ### Minor Changes

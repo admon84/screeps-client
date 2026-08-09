@@ -1,7 +1,6 @@
 ---
-"screepsmod-client-new": patch
-"xxscreeps-mod-client": patch
+'screepsmod-client-new': patch
+'xxscreeps-mod-client': patch
 ---
 
-Update the required `screeps-client` version for both mod packages after the next client release.
-Adjust this summary if the release notes should say something more specific.
+Update the embedded client (RoomVisual text and shape style defaults now match the official client; map visual text now matches the reference client's opacity, stroke and background-box behaviour).

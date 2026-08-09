@@ -1,4 +1,4 @@
-import { createEffect, onCleanup } from 'solid-js'
+import { batch, createEffect, onCleanup } from 'solid-js'
 import { SubscriptionGroup } from 'screeps-connectivity'
 import type { Badge, RoomObjectDiff, RoomObjectMap } from 'screeps-connectivity'
 import { client, recordGameTime, setGameTime } from '~/stores/clientStore.js'
@@ -38,11 +38,13 @@ export function useRoomSubscription(opts: {
     const shard = opts.shard()
 
     log(`navigate → ${room} (shard=${shard ?? 'default'})`)
-    opts.onReset()
-    setGameTime(null)
-    clearSelection()
-    resetRoomStats()
-    setRoomUsers(null)
+    batch(() => {
+      opts.onReset()
+      setGameTime(null)
+      clearSelection()
+      resetRoomStats()
+      setRoomUsers(null)
+    })
 
     const group = new SubscriptionGroup()
 
@@ -55,11 +57,15 @@ export function useRoomSubscription(opts: {
       if (!data.diff) {
         log(`objects loaded — ${room}: ${stats.objectCount} objects, tick=${data.gameTime}`)
       }
-      opts.onState({ objects: data.objects, diff: data.diff, users: data.users }, data.visual)
-      setGameTime(data.gameTime ?? null)
-      recordGameTime(data.gameTime)
-      publishRoomStats(stats)
-      setRoomUsers(data.users ?? null)
+      // One batch per tick: the render effect tracks several of these signals and must
+      // run once per update, not once per setter.
+      batch(() => {
+        opts.onState({ objects: data.objects, diff: data.diff, users: data.users }, data.visual)
+        setGameTime(data.gameTime ?? null)
+        recordGameTime(data.gameTime)
+        publishRoomStats(stats)
+        setRoomUsers(data.users ?? null)
+      })
     }))
 
     onCleanup(() => {

@@ -1,5 +1,29 @@
 # screepsmod-client-new
 
+## 0.2.31
+
+### Patch Changes
+
+- 01a3551: Update the embedded client (badge symbols granted by decorations appear in the badge editor; OAuth registration gains a "Disable email notifications" checkbox; WASM modules can be uploaded and managed in the code editor).
+- Updated dependencies [01a3551]
+- Updated dependencies [7d2e2f4]
+- Updated dependencies [40f5076]
+- Updated dependencies [e74c83c]
+  - screeps-client@0.24.0
+
+## 0.2.30
+
+### Patch Changes
+
+- 1accbd8: Update the required `screeps-client` version for both mod packages after the next client release.
+  Adjust this summary if the release notes should say something more specific.
+- Updated dependencies [1accbd8]
+- Updated dependencies [0b62464]
+- Updated dependencies [3d31ab2]
+- Updated dependencies [ae911fa]
+- Updated dependencies [3020fec]
+  - screeps-client@0.23.0
+
 ## 0.2.29
 
 ### Patch Changes

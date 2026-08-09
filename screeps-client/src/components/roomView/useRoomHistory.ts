@@ -1,4 +1,4 @@
-import { createEffect, createSignal, onCleanup, untrack, type Accessor } from 'solid-js'
+import { batch, createEffect, createSignal, onCleanup, untrack, type Accessor } from 'solid-js'
 import { client, isPrivateServer, serverVersion, setGameTime } from '~/stores/clientStore.js'
 import { roomUsers } from '~/stores/roomDataStore.js'
 import { addToast } from '~/stores/toastStore.js'
@@ -53,9 +53,13 @@ export function useRoomHistory(opts: {
             seekToTick(state.clampedTo)
             return
           }
-          opts.onState({ objects: state.objects, diff: undefined, users: cachedUsers })
-          setGameTime(state.gameTime)
-          publishRoomStats(accumulateRoomStats(state.objects, cachedUsers))
+          const stats = accumulateRoomStats(state.objects, cachedUsers)
+          // Mirrors the live path: one batch per tick so the render effect runs once.
+          batch(() => {
+            opts.onState({ objects: state.objects, diff: undefined, users: cachedUsers })
+            setGameTime(state.gameTime)
+            publishRoomStats(stats)
+          })
         })
         .catch((err: Error) => {
           if (cancelled) return

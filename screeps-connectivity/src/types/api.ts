@@ -148,6 +148,16 @@ export interface ApiUserBranchesResponse {
   }>
 }
 
+/** One entry in a branch's module map: JS source text, or a binary
+ *  (WebAssembly) module carried as base64. */
+export type ApiCodeModule = string | { binary: string }
+
+export interface ApiUserCodeResponse {
+  ok: number
+  branch: string
+  modules: Record<string, ApiCodeModule>
+}
+
 /** The two ranking tables the world game keeps: `world` scores control points
  *  earned upgrading controllers, `power` scores power processed. (The official
  *  server also ranks the retired arena/survival modes; they have no client here.) */
@@ -519,6 +529,8 @@ export interface ApiRoomDecorationDef {
   tileScale?: number | string
   /** Target object type, `type === 'object'` only. */
   objectType?: string
+  /** The badge symbol this decoration grants while worn, `type === 'badge'` only. */
+  badge?: import('./game.js').BadgeSymbol
   [key: string]: unknown
 }
 
